@@ -1,73 +1,61 @@
-\<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KESCO 전국 점검지도</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false"></script>
     <style>
         body { margin: 0; padding: 0; font-family: sans-serif; }
         #map { width: 100%; height: 100vh; background: #eee; }
         #upload-box {
             position: absolute; top: 15px; left: 15px; z-index: 1000; 
-            background: white; padding: 15px; border-radius: 12px;
+            background: white; padding: 20px; border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3); width: 260px; border: 2px solid #fae100;
         }
         #upload-btn {
             width: 100%; padding: 12px; background: #007bff; color: white;
             border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px;
         }
-        #status { margin-top: 12px; font-size: 13px; font-weight: bold; color: #333; }
+        #status { margin-top: 12px; font-size: 13px; font-weight: bold; color: #333; line-height: 1.4; }
     </style>
 </head>
 <body>
     <div id="upload-box">
         <h3 style="margin:0 0 5px 0;">🌍 전국 점검 데이터 등록</h3>
+        <p style="font-size:11px; color:#666; margin-bottom:10px;">전국 엑셀 데이터를 올려주세요.</p>
         <input type="file" id="excel-file" accept=".xlsx, .xls">
         <button id="upload-btn">지도에 표시하기</button>
-        <div id="status">카카오 연결 확인 중...</div>
+        <div id="status">연결 확인 중...</div>
     </div>
     <div id="map"></div>
 
     <script>
-        // 1. 카카오 API 로드 상태 확인 및 수동 로드
-        var script = document.createElement('script');
-        script.type = 'text/javascript';
-        // 질문자님의 키를 직접 넣었습니다.
-        script.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false';
-        
-        script.onload = function() {
-            kakao.maps.load(function() {
-                initMap();
-            });
-        };
-        
-        script.onerror = function() {
-            document.getElementById('status').innerHTML = 
-                "<span style='color:red;'>⚠️ 카카오 서버 접속 실패!<br>광고 차단 프로그램(AdBlock)을 끄거나 다른 브라우저를 써보세요.</span>";
-        };
-        
-        document.head.appendChild(script);
+        function checkKakao() {
+            if (typeof kakao !== 'undefined') {
+                kakao.maps.load(function() { startApp(); });
+            } else {
+                document.getElementById('status').innerHTML = 
+                    "<span style='color:red;'>⚠️ 아직 카카오 연결 전입니다.<br>1. 카카오 설정 '저장' 확인<br>2. 3분 뒤 시크릿 창으로 접속</span>";
+            }
+        }
 
-        function initMap() {
+        function startApp() {
             var statusMsg = document.getElementById('status');
-            statusMsg.innerText = "✅ 준비 완료 (전국 모드)";
+            statusMsg.innerText = "✅ 준비 완료! (파일을 올려주세요)";
             
             var mapContainer = document.getElementById('map');
-            var map = new kakao.maps.Map(mapContainer, { 
-                center: new kakao.maps.LatLng(36.3504, 127.3845), 
-                level: 11 
-            });
+            var map = new kakao.maps.Map(mapContainer, { center: new kakao.maps.LatLng(36.3, 127.5), level: 12 });
             var clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 7 });
             var geocoder = new kakao.maps.services.Geocoder();
 
-            // 기존 데이터 로드
             var saved = localStorage.getItem('kesco_map_data');
             if(saved) drawMarkers(JSON.parse(saved), map, clusterer);
 
             document.getElementById('upload-btn').onclick = function() {
-                var fileInput = document.getElementById('excel-file');
-                if (!fileInput.files.length) { alert("파일을 선택하세요!"); return; }
+                var file = document.getElementById('excel-file').files[0];
+                if (!file) { alert("파일을 먼저 선택하세요!"); return; }
                 
                 statusMsg.innerText = "데이터 분석 중...";
                 var reader = new FileReader();
@@ -83,25 +71,21 @@
                             if(addr) {
                                 geocoder.addressSearch(addr, function(res, stat) {
                                     if(stat === kakao.maps.services.Status.OK) {
-                                        successData.push({
-                                            title: row['상호명'] || row['대상처명'] || '이름없음', 
-                                            lat: res[0].y, lng: res[0].x, 
-                                            address: addr, memo: row['비고'] || ''
-                                        });
+                                        successData.push({title: row['상호명'] || row['대상처명'] || '이름없음', lat: res[0].y, lng: res[0].x, address: addr, memo: row['비고'] || ''});
                                     }
                                     count++;
-                                    statusMsg.innerText = "진행률: " + count + " / " + json.length;
+                                    statusMsg.innerText = "변환 중... (" + count + "/" + json.length + ")";
                                     if(count === json.length) {
                                         localStorage.setItem('kesco_map_data', JSON.stringify(successData));
                                         drawMarkers(successData, map, clusterer);
-                                        statusMsg.innerText = "완료: " + successData.length + "건";
+                                        statusMsg.innerText = "완료: " + successData.length + "건 표시됨";
                                     }
                                 });
                             } else { count++; }
                         }, i * 30);
                     });
                 };
-                reader.readAsArrayBuffer(fileInput.files[0]);
+                reader.readAsArrayBuffer(file);
             };
         }
 
@@ -112,17 +96,13 @@
                 var content = '<div style="padding:10px;font-size:12px;width:180px;">' +
                               '<b>'+s.title+'</b><br>'+s.address+'<br>'+
                               '<a href="https://map.kakao.com/link/to/'+s.title+','+s.lat+','+s.lng+'" target="_blank" style="display:block;margin-top:8px;background:#fae100;text-align:center;padding:6px;border-radius:4px;text-decoration:none;color:black;font-weight:bold;">길찾기</a></div>';
-                kakao.maps.event.addListener(m, 'click', function() { 
-                    new kakao.maps.InfoWindow({ content: content, removable: true }).open(map, m); 
-                });
+                kakao.maps.event.addListener(m, 'click', function() { new kakao.maps.InfoWindow({ content: content, removable: true }).open(map, m); });
                 return m;
             });
             clusterer.addMarkers(markers);
-            if(markers.length > 0) {
-                map.setCenter(markers[0].getPosition());
-                map.setLevel(9);
-            }
+            if(markers.length > 0) { map.setCenter(markers[0].getPosition()); map.setLevel(9); }
         }
+        setTimeout(checkKakao, 1000);
     </script>
 </body>
 </html>
