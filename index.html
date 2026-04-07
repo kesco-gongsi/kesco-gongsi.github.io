@@ -3,150 +3,113 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>안전점검 현장지도</title>
-    
+    <title>KESCO 점검지도</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    
     <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer"></script>
-    
     <style>
-        body { margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; }
-        #map { width: 100%; height: 100vh; }
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; z-index: 1; }
         #upload-box {
-            position: absolute; top: 10px; left: 10px; z-index: 10; 
-            background: rgba(255, 255, 255, 0.9); padding: 15px; border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3); width: 280px;
+            position: absolute; top: 20px; left: 20px; z-index: 100; 
+            background: white; padding: 20px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 260px;
+            border: 2px solid #fae100;
         }
-        #status { margin-top: 10px; font-weight: bold; color: #e65100; font-size: 14px; }
-        .info-window { padding: 10px; font-size: 14px; width: 200px; }
-        .navi-btn { 
-            display: block; margin-top: 8px; padding: 5px; 
-            background: #fae100; color: #333; text-align: center; 
-            text-decoration: none; border-radius: 4px; font-weight: bold;
-        }
+        input[type="file"] { margin-top: 10px; width: 100%; }
+        #status { margin-top: 15px; font-weight: bold; font-size: 14px; color: #333; }
     </style>
 </head>
 <body>
-
     <div id="upload-box">
-        <h3 style="margin: 0 0 10px 0; font-size: 16px;">🔍 점검 대상지 맵데이트</h3>
-        <input type="file" id="excel-file" accept=".xlsx, .xls" style="width: 100%;">
-        <div id="status">엑셀을 올려주세요 (연번, 대상처명, 주소, 비고)</div>
+        <h2 style="margin:0; font-size:18px;">📍 점검 데이터 등록</h2>
+        <p style="font-size:12px; color:#666;">엑셀 파일을 선택해 주세요.</p>
+        <input type="file" id="excel-file" accept=".xlsx, .xls">
+        <div id="status">대기 중... (제목: 상호명, 주소)</div>
     </div>
-
     <div id="map"></div>
 
-<script>
-    // 1. 지도 기본 설정 (전북 전주/완주 부근을 중심점으로)
-    var mapContainer = document.getElementById('map');
-    var mapOption = { center: new kakao.maps.LatLng(35.8242, 127.1480), level: 8 };
-    var map = new kakao.maps.Map(mapContainer, mapOption);
+    <script>
+        var mapContainer = document.getElementById('map');
+        var mapOption = { center: new kakao.maps.LatLng(35.8920, 127.1550), level: 8 };
+        var map = new kakao.maps.Map(mapContainer, mapOption);
+        var clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 6 });
+        var geocoder = new kakao.maps.services.Geocoder();
 
-    // 2. 마커 클러스터러 (마커 뭉치기)
-    var clusterer = new kakao.maps.MarkerClusterer({
-        map: map, averageCenter: true, minLevel: 6
-    });
-
-    var geocoder = new kakao.maps.services.Geocoder();
-    var currentMarkers = []; // 현재 그려진 마커들
-
-    // ★ 3. 접속하자마자 스마트폰에 저장된 예전 데이터가 있는지 확인하고 불러오기
-    window.onload = function() {
-        var savedData = localStorage.getItem('kesco_map_data');
-        if (savedData) {
-            document.getElementById('status').innerText = "내 폰에 저장된 현장을 불러왔습니다!";
-            var sites = JSON.parse(savedData);
-            drawMarkers(sites);
-        }
-    };
-
-    // 4. 엑셀 파일 업로드 처리
-    document.getElementById('excel-file').addEventListener('change', function(e) {
-        var file = e.target.files[0];
-        if (!file) return;
-
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            var data = new Uint8Array(e.target.result);
-            var workbook = XLSX.read(data, {type: 'array'});
-            var worksheet = workbook.Sheets[workbook.SheetNames[0]];
-            var json = XLSX.utils.sheet_to_json(worksheet);
-            processAddresses(json);
+        window.onload = function() {
+            var saved = localStorage.getItem('kesco_map_data');
+            if(saved) {
+                document.getElementById('status').innerText = "기존 데이터를 불러왔습니다.";
+                drawMarkers(JSON.parse(saved));
+            }
         };
-        reader.readAsArrayBuffer(file);
-    });
 
-    // 5. 한글 주소를 좌표로 변환하기
-    function processAddresses(dataList) {
-        var statusMsg = document.getElementById('status');
-        var total = dataList.length;
-        var count = 0;
-        var successData = []; // 변환 성공한 데이터 모음
+        document.getElementById('excel-file').addEventListener('change', function(e) {
+            var file = e.target.files[0];
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                var data = new Uint8Array(e.target.result);
+                var workbook = XLSX.read(data, {type: 'array'});
+                var json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                
+                var statusMsg = document.getElementById('status');
+                var total = json.length;
+                var count = 0;
+                var successData = [];
+                clusterer.clear();
 
-        statusMsg.innerText = "지도 변환 중... 잠시만 기다려주세요.";
-        clusterer.clear(); // 기존 마커 지우기
-
-        dataList.forEach(function(row, index) {
-            setTimeout(function() {
-                var address = row['주소'];
-                var name = row['대상처명'] || '이름 없음';
-                var memo = row['비고'] || '';
-
-                if (address) {
-                    geocoder.addressSearch(address, function(result, status) {
-                        if (status === kakao.maps.services.Status.OK) {
-                            successData.push({
-                                title: name,
-                                lat: result[0].y,
-                                lng: result[0].x,
-                                address: address,
-                                memo: memo
+                statusMsg.innerText = "지도 변환 중... 잠시만 기다려주세요.";
+                
+                json.forEach(function(row, index) {
+                    setTimeout(function() {
+                        // 엑셀 제목을 '상호명'과 '주소'로 읽도록 수정했습니다.
+                        var addr = row['주소'];
+                        var title = row['상호명'] || row['대상처명'] || '이름없음';
+                        
+                        if(addr) {
+                            geocoder.addressSearch(addr, function(result, status) {
+                                if(status === kakao.maps.services.Status.OK) {
+                                    successData.push({
+                                        title: title,
+                                        lat: result[0].y, lng: result[0].x,
+                                        address: addr, memo: row['비고'] || ''
+                                    });
+                                }
+                                count++;
+                                if(count === total) {
+                                    localStorage.setItem('kesco_map_data', JSON.stringify(successData));
+                                    drawMarkers(successData);
+                                    statusMsg.innerText = "완료! " + successData.length + "곧 등록됨.";
+                                }
                             });
+                        } else { 
+                            count++;
+                            if(count === total) {
+                                localStorage.setItem('kesco_map_data', JSON.stringify(successData));
+                                drawMarkers(successData);
+                                statusMsg.innerText = "변환 종료 (" + successData.length + "건)";
+                            }
                         }
-                        count++;
-                        if (count === total) { // 변환이 모두 끝났을 때
-                            // 스마트폰에 데이터 영구 저장
-                            localStorage.setItem('kesco_map_data', JSON.stringify(successData));
-                            drawMarkers(successData);
-                            statusMsg.innerText = "업데이트 완료! 총 " + successData.length + "건 등록됨.";
-                        }
-                    });
-                } else {
-                    count++;
-                }
-            }, index * 100); // 카카오 서버 과부하 방지 (0.1초 간격)
-        });
-    }
-
-    // 6. 좌표 데이터를 지도에 핀으로 꽂고 말풍선 달기
-    function drawMarkers(sites) {
-        var markers = sites.map(function(site) {
-            var marker = new kakao.maps.Marker({
-                position: new kakao.maps.LatLng(site.lat, site.lng)
-            });
-
-            // 길찾기 링크 (카카오맵 웹/앱으로 연결)
-            var naviUrl = "https://map.kakao.com/link/to/" + site.title + "," + site.lat + "," + site.lng;
-
-            // 말풍선(InfoWindow) 내용 구성
-            var infoContent = '<div class="info-window">' +
-                              '<b>' + site.title + '</b><br>' +
-                              '<span style="font-size:12px; color:#666;">' + site.address + '</span><br>' +
-                              '<span style="font-size:12px; color:red;">' + site.memo + '</span>' +
-                              '<a href="' + naviUrl + '" target="_blank" class="navi-btn">길찾기</a>' +
-                              '</div>';
-
-            var infowindow = new kakao.maps.InfoWindow({ content: infoContent, removable: true });
-
-            kakao.maps.event.addListener(marker, 'click', function() {
-                infowindow.open(map, marker);
-            });
-
-            return marker;
+                    }, index * 100);
+                });
+            };
+            reader.readAsArrayBuffer(file);
         });
 
-        clusterer.addMarkers(markers);
-    }
-</script>
+        function drawMarkers(sites) {
+            var markers = sites.map(function(s) {
+                var m = new kakao.maps.Marker({ position: new kakao.maps.LatLng(s.lat, s.lng) });
+                var content = '<div style="padding:10px;font-size:13px;width:180px;">' +
+                              '<b>'+s.title+'</b><br>'+s.address+'<br><span style="color:blue">'+s.memo+'</span>' +
+                              '<br><a href="https://map.kakao.com/link/to/'+s.title+','+s.lat+','+s.lng+'" target="_blank" style="display:block;margin-top:5px;background:#fae100;text-align:center;text-decoration:none;padding:5px;border-radius:4px;color:black;">길찾기</a></div>';
+                var iw = new kakao.maps.InfoWindow({ content: content, removable: true });
+                kakao.maps.event.addListener(m, 'click', function() { iw.open(map, m); });
+                return m;
+            });
+            clusterer.addMarkers(markers);
+            if(markers.length > 0) {
+                map.setCenter(markers[0].getPosition());
+            }
+        }
+    </script>
 </body>
 </html>
