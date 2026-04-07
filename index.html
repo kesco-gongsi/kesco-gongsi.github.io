@@ -44,9 +44,9 @@
     <div id="map"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer"></script>
     <script>
-        kakao.maps.load(function () {
+        window.onload = function () {
             var statusEl = document.getElementById('status');
             statusEl.innerText = '✅ 준비 완료';
 
