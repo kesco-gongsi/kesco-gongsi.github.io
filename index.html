@@ -47,9 +47,19 @@
         .nav-btn { display: block; background: #0055AA; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; margin-top: 8px; }
         .del-btn { display: block; margin-top: 5px; background: #fecaca; color: #b91c1c; text-align: center; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
 
-        .my-location-marker { position: relative; width: 40px; height: 40px; pointer-events: none; }
-        .direction-arrow { position: absolute; top: -10px; left: 10px; width: 20px; height: 25px; background: url('https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/direction_white.png') no-repeat; background-size: contain; transform-origin: center 20px; z-index: 2; }
-        .location-dot { position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; background: #0055AA; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,85,170,0.5); z-index: 1; }
+        /* [수정] 현위치 방향 화살표 (SVG 데이터 내장으로 무조건 렌더링) */
+        .my-location-marker { position: relative; width: 50px; height: 50px; pointer-events: none; }
+        .direction-arrow { 
+            position: absolute; top: 0px; left: 15px; width: 20px; height: 25px; 
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23EF4444'%3E%3Cpath d='M12 2L22 20L12 17L2 20L12 2Z'/%3E%3C/svg%3E");
+            background-size: contain; background-repeat: no-repeat; background-position: center;
+            transform-origin: center bottom; z-index: 2; transition: transform 0.1s ease-out;
+        }
+        .location-dot { 
+            position: absolute; top: 15px; left: 15px; width: 20px; height: 20px; 
+            background: #0055AA; border: 3px solid white; border-radius: 50%; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 3; 
+        }
     </style>
 </head>
 <body>
@@ -61,11 +71,11 @@
             <button id="btn-sky" class="m-type-btn inactive" onclick="setMapType('skyview')">위성사진</button>
         </div>
 
-        <h3>📊 점검 관리</h3>
+        <h3>📊 점검 지도</h3>
         <div id="menu-content">
             <input type="file" id="excel-file" accept=".xlsx, .xls" style="font-size:12px; margin-bottom:15px; width: 100%;">
             <button id="upload-btn" class="btn">📍 엑셀 데이터 등록</button>
-            <button id="track-btn" class="btn">📡 위치 추적 시작</button>
+            <button id="track-btn" class="btn">📡 위치 표기 시작</button>
             <button id="clear-btn" class="btn">🔄 전체 초기화</button>
             <div id="status">지도를 길게 눌러 핀 추가</div>
         </div>
@@ -102,12 +112,24 @@
             }
         }
 
+        // [수정] 안드로이드 기기 센서 충돌 방지 로직
+        var isAbsoluteOrientation = false;
         function handleOrientation(event) {
-            var heading = 0;
-            if (event.webkitCompassHeading) heading = event.webkitCompassHeading;
-            else if (event.alpha !== null) heading = event.absolute ? event.alpha : 360 - event.alpha;
-            var arrow = document.getElementById('direction-arrow');
-            if (arrow) arrow.style.transform = 'rotate(' + heading + 'deg)';
+            var heading = null;
+            
+            if (event.webkitCompassHeading !== undefined) {
+                heading = event.webkitCompassHeading; // iOS (아이폰)
+            } else if (event.absolute === true && event.alpha !== null) {
+                isAbsoluteOrientation = true;
+                heading = 360 - event.alpha; // 안드로이드 (절대 좌표 최우선 적용)
+            } else if (!isAbsoluteOrientation && event.alpha !== null) {
+                heading = 360 - event.alpha; // 안드로이드 (상대 좌표 대체용)
+            }
+
+            if (heading !== null) {
+                var arrow = document.getElementById('direction-arrow');
+                if (arrow) arrow.style.transform = 'rotate(' + heading + 'deg)';
+            }
         }
 
         kakao.maps.load(function() {
@@ -127,31 +149,20 @@
             if(saved) { currentSites = JSON.parse(saved); drawMarkers(); }
         });
 
-        // [수정] 좌표를 주소로 변환하는 로직 추가
         function addManualMarker(latLng) {
-            var title = prompt("📍 새로운 장소의 이름을 입력하세요:", "");
+            var title = prompt("📍 새로운 장소의 상호를 입력하세요:", "");
             if(!title) return;
             var memo = prompt("📝 메모를 입력하세요 (없으면 확인):", "");
             
-            // 좌표로 주소 검색 (경도, 위도 순서)
             geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
                 var addrStr = "수동 등록 지점";
-                
-                // 주소 변환에 성공한 경우
                 if (status === kakao.maps.services.Status.OK) {
-                    // 도로명 주소가 있으면 우선 사용, 없으면 지번 주소 사용
                     addrStr = !!result[0].road_address ? result[0].road_address.address_name : result[0].address.address_name;
                 }
                 
                 var newSite = {
-                    id: Date.now(), 
-                    title: title, 
-                    lat: latLng.getLat(), 
-                    lng: latLng.getLng(),
-                    addr: addrStr, // 변환된 주소 입력
-                    colorCode: 2, 
-                    isAbsent: false, 
-                    memo: memo || ""
+                    id: Date.now(), title: title, lat: latLng.getLat(), lng: latLng.getLng(),
+                    addr: addrStr, colorCode: 2, isAbsent: false, memo: memo || ""
                 };
                 
                 currentSites.push(newSite);
@@ -197,18 +208,25 @@
             reader.readAsArrayBuffer(file);
         };
 
+        // [수정] 위치 추적 시작/중단 시 센서 이벤트 깔끔하게 정리
         document.getElementById('track-btn').onclick = function() {
             if(watchId) {
                 navigator.geolocation.clearWatch(watchId); watchId = null;
-                window.removeEventListener('deviceorientationabsolute', handleOrientation);
+                window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+                window.removeEventListener('deviceorientation', handleOrientation, true);
+                isAbsoluteOrientation = false; // 상태 초기화
                 if(myLocMarker) myLocMarker.setMap(null); myLocMarker = null;
-                this.innerText = "📡 위치 추적 시작";
+                this.innerText = "📡 위치 표기 시작";
                 this.style.background = "#f0f7ff";
                 this.style.color = "#0055AA";
             } else {
                 if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation); });
-                } else { window.addEventListener('deviceorientationabsolute', handleOrientation, true); }
+                    DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation, true); });
+                } else { 
+                    window.addEventListener('deviceorientationabsolute', handleOrientation, true); 
+                    window.addEventListener('deviceorientation', handleOrientation, true); 
+                }
+                
                 if(navigator.geolocation) {
                     watchId = navigator.geolocation.watchPosition(function(pos) {
                         var moveLoc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
@@ -221,7 +239,7 @@
                         } else { myLocMarker.setPosition(moveLoc); }
                         map.setCenter(moveLoc);
                     }, null, { enableHighAccuracy: true });
-                    this.innerText = "🛑 추적 중단";
+                    this.innerText = "🛑 표기 중단";
                     this.style.background = "#333"; this.style.color = "#fff";
                 }
             }
