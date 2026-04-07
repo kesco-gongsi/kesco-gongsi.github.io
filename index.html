@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>KESCO 점검지도</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer"></script>
+    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer"></script>
     <style>
         body { margin: 0; padding: 0; }
         #map { width: 100%; height: 100vh; z-index: 1; }
@@ -15,106 +15,98 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 260px;
             border: 2px solid #fae100;
         }
-        input[type="file"] { margin-top: 10px; width: 100%; }
-        #status { margin-top: 15px; font-weight: bold; font-size: 14px; color: #333; }
-        .info-content { padding: 10px; font-size: 13px; width: 180px; line-height: 1.5; }
-        .navi-btn { 
-            display: block; margin-top: 8px; background: #fae100; text-align: center; 
-            text-decoration: none; padding: 8px; border-radius: 4px; color: black; font-weight: bold;
+        input[type="file"] { margin-top: 10px; width: 100%; margin-bottom: 10px; }
+        /* 등록하기 버튼 스타일 */
+        #upload-btn {
+            width: 100%; padding: 10px; background-color: #007bff; color: white;
+            border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
         }
+        #upload-btn:hover { background-color: #0056b3; }
+        #status { margin-top: 15px; font-weight: bold; font-size: 14px; color: #333; }
     </style>
 </head>
 <body>
     <div id="upload-box">
         <h2 style="margin:0; font-size:18px;">📍 점검 데이터 등록</h2>
-        <p style="font-size:12px; color:#666;">(양식: 연번, 상호명, 주소, 비고)</p>
+        <p style="font-size:12px; color:#666;">엑셀 선택 후 등록 버튼을 누르세요.</p>
         <input type="file" id="excel-file" accept=".xlsx, .xls">
-        <div id="status">엑셀 파일을 올려주세요.</div>
+        <button id="upload-btn">등록하기</button>
+        <div id="status">대기 중...</div>
     </div>
     <div id="map"></div>
 
     <script>
-        var mapContainer = document.getElementById('map');
-        var mapOption = { center: new kakao.maps.LatLng(35.8920, 127.1550), level: 8 };
-        var map = new kakao.maps.Map(mapContainer, mapOption);
-        var clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 6 });
-        var geocoder = new kakao.maps.services.Geocoder();
+        kakao.maps.load(function() {
+            var mapContainer = document.getElementById('map');
+            var mapOption = { center: new kakao.maps.LatLng(35.8920, 127.1550), level: 8 };
+            var map = new kakao.maps.Map(mapContainer, mapOption);
+            var clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 6 });
+            var geocoder = new kakao.maps.services.Geocoder();
 
-        // 1. 페이지 접속 시 폰에 저장된 데이터 확인
-        window.onload = function() {
             var saved = localStorage.getItem('kesco_map_data');
             if(saved) {
-                var data = JSON.parse(saved);
-                document.getElementById('status').innerText = "기존 " + data.length + "건을 불러왔습니다.";
-                drawMarkers(data);
+                document.getElementById('status').innerText = "기존 데이터를 불러왔습니다.";
+                drawMarkers(JSON.parse(saved));
             }
-        };
 
-        // 2. 엑셀 파일 처리
-        document.getElementById('excel-file').addEventListener('change', function(e) {
-            var file = e.target.files[0];
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                var data = new Uint8Array(e.target.result);
-                var workbook = XLSX.read(data, {type: 'array'});
-                var json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+            // 버튼을 눌렀을 때 실행되도록 변경
+            document.getElementById('upload-btn').addEventListener('click', function() {
+                var fileInput = document.getElementById('excel-file');
+                var file = fileInput.files[0];
                 
-                var statusMsg = document.getElementById('status');
-                var total = json.length;
-                var count = 0;
-                var successData = [];
-                clusterer.clear();
+                if (!file) {
+                    alert("먼저 엑셀 파일을 선택해 주세요!");
+                    return;
+                }
 
-                statusMsg.innerText = "지도 변환 중... (잠시만 기다려주세요)";
-                
-                json.forEach(function(row, index) {
-                    setTimeout(function() {
-                        // 질문하신 '상호명' 제목을 읽어옵니다.
-                        var addr = row['주소'];
-                        var sangho = row['상호명'] || '이름없음';
-                        
-                        if(addr) {
-                            geocoder.addressSearch(addr, function(result, status) {
-                                if(status === kakao.maps.services.Status.OK) {
-                                    successData.push({
-                                        title: sangho,
-                                        lat: result[0].y, lng: result[0].x,
-                                        address: addr, 
-                                        memo: row['비고'] || ''
-                                    });
-                                }
-                                count++;
-                                if(count === total) {
-                                    localStorage.setItem('kesco_map_data', JSON.stringify(successData));
-                                    drawMarkers(successData);
-                                    statusMsg.innerText = "완료! " + successData.length + "곳 등록됨.";
-                                }
-                            });
-                        } else { 
-                            count++;
-                        }
-                    }, index * 100); // 0.1초 간격
-                });
-            };
-            reader.readAsArrayBuffer(file);
-        });
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var data = new Uint8Array(e.target.result);
+                    var workbook = XLSX.read(data, {type: 'array'});
+                    var json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    
+                    var statusMsg = document.getElementById('status');
+                    var total = json.length;
+                    var count = 0;
+                    var successData = [];
+                    clusterer.clear();
 
-        // 3. 지도에 핀 꽂기
-        function drawMarkers(sites) {
-            var markers = sites.map(function(s) {
-                var m = new kakao.maps.Marker({ position: new kakao.maps.LatLng(s.lat, s.lng) });
-                var content = '<div class="info-content">' +
-                              '<strong style="font-size:15px;">'+s.title+'</strong><br>' +
-                              '<span style="color:#666;">'+s.address+'</span><br>' +
-                              '<span style="color:blue;">'+s.memo+'</span>' +
-                              '<a href="https://map.kakao.com/link/to/'+s.title+','+s.lat+','+s.lng+'" target="_blank" class="navi-btn">길찾기 (카카오맵)</a></div>';
-                var iw = new kakao.maps.InfoWindow({ content: content, removable: true });
-                kakao.maps.event.addListener(m, 'click', function() { iw.open(map, m); });
-                return m;
+                    statusMsg.innerText = "변환 중... 잠시만 기다려주세요.";
+                    
+                    json.forEach(function(row, index) {
+                        setTimeout(function() {
+                            var addr = row['주소'];
+                            var title = row['상호명'] || row['대상처명'] || '이름없음';
+                            if(addr) {
+                                geocoder.addressSearch(addr, function(result, status) {
+                                    if(status === kakao.maps.services.Status.OK) {
+                                        successData.push({
+                                            title: title, lat: result[0].y, lng: result[0].x,
+                                            address: addr, memo: row['비고'] || ''
+                                        });
+                                    }
+                                    count++;
+                                    if(count === total) {
+                                        localStorage.setItem('kesco_map_data', JSON.stringify(successData));
+                                        drawMarkers(successData);
+                                        statusMsg.innerText = "완료! " + successData.length + "곳 등록됨.";
+                                    }
+                                });
+                            } else { count++; }
+                        }, index * 100);
+                    });
+                };
+                reader.readAsArrayBuffer(file);
             });
-            clusterer.addMarkers(markers);
-            if(markers.length > 0) map.setCenter(markers[0].getPosition());
-        }
-    </script>
-</body>
-</html>
+
+            function drawMarkers(sites) {
+                var markers = sites.map(function(s) {
+                    var m = new kakao.maps.Marker({ position: new kakao.maps.LatLng(s.lat, s.lng) });
+                    var content = '<div style="padding:10px;font-size:13px;width:180px;">' +
+                                  '<b>'+s.title+'</b><br>'+s.address+'<br>'+
+                                  '<a href="https://map.kakao.com/link/to/'+s.title+','+s.lat+','+s.lng+'" target="_blank" style="display:block;margin-top:5px;background:#fae100;text-align:center;padding:5px;border-radius:4px;text-decoration:none;color:black;">길찾기</a></div>';
+                    var iw = new kakao.maps.InfoWindow({ content: content, removable: true });
+                    kakao.maps.event.addListener(m, 'click', function() { iw.open(map, m); });
+                    return m;
+                });
+                clusterer.addMarkers(markers
