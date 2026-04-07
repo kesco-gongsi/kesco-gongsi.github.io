@@ -10,7 +10,6 @@
         body { margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; overflow: hidden; background: #f0f2f5; }
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; }
 
-        /* [수정] 전체 메뉴창 스타일: 화이트 & 블루 톤 */
         #upload-box {
             position: absolute; top: 15px; left: 15px; z-index: 1001; 
             background: rgba(255, 255, 255, 0.95); color: #333;
@@ -20,16 +19,13 @@
             border: 1px solid #e1e4e8;
         }
 
-        /* [수정] 접혔을 때: 너비를 버튼에 맞게 조절하고 내부 요소 숨김 */
         #upload-box.collapsed { 
             width: 100px; padding: 0; height: 42px; border: none; background: transparent; box-shadow: none;
         }
         
-        /* 접혔을 때 제목과 콘텐츠를 완전히 숨김 (글자 잘림 방지) */
         #upload-box.collapsed h3, 
         #upload-box.collapsed #menu-content { display: none; }
 
-        /* [수정] 토글 버튼 스타일: 블루 계열 */
         #toggle-btn {
             cursor: pointer; background: #0055AA; border: none;
             color: white; font-size: 13px; padding: 10px 15px; border-radius: 8px; 
@@ -38,7 +34,6 @@
         }
         #toggle-btn:hover { background: #003d7a; }
         
-        /* 접힌 상태에서의 버튼 스타일 */
         #upload-box.collapsed #toggle-btn {
             height: 42px; border-radius: 10px;
         }
@@ -52,14 +47,12 @@
         }
         .btn:active { opacity: 0.8; }
 
-        /* 버튼들 블루/그레이 톤으로 변경 */
         #upload-btn { background: #0055AA; color: white; }
         #track-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
         #clear-btn { background: #ffffff; color: #666; border: 1px solid #ddd; margin-top: 10px; }
         
         #status { margin-top: 10px; font-size: 12px; color: #666; text-align: center; }
 
-        /* 말풍선 내 길찾기 버튼 블루로 변경 */
         .del-btn {
             display: block; margin-top: 8px; background: #ef4444; color: white;
             text-align: center; padding: 8px; border-radius: 6px;
@@ -85,8 +78,8 @@
         var map, clusterer, geocoder, myLocCircle;
         var watchId = null;
         var currentSites = [];
+        var currentInfoWindow = null; // [추가] 현재 열려있는 말풍선을 추적하기 위한 변수
 
-        // [수정] 메뉴 토글 로직
         function toggleMenu() {
             var box = document.getElementById('upload-box');
             var btn = document.getElementById('toggle-btn');
@@ -112,7 +105,7 @@
                 disableClickZoom: false,
                 styles: [{
                     width : '40px', height : '40px',
-                    background: 'rgba(0, 85, 170, 0.9)', // 클러스터러도 블루 톤
+                    background: 'rgba(0, 85, 170, 0.9)',
                     borderRadius: '20px', color: '#fff',
                     textAlign: 'center', fontWeight: 'bold',
                     lineHeight: '41px'
@@ -120,6 +113,14 @@
             });
 
             geocoder = new kakao.maps.services.Geocoder();
+
+            // [추가] 지도 클릭 시 말풍선 닫기 이벤트
+            kakao.maps.event.addListener(map, 'click', function() {
+                if (currentInfoWindow) {
+                    currentInfoWindow.close();
+                    currentInfoWindow = null;
+                }
+            });
 
             var saved = localStorage.getItem('kesco_map_data');
             if(saved) {
@@ -228,14 +229,29 @@
                 delBtn.innerText = '✅ 점검 완료 (삭제)';
                 delBtn.onclick = function() {
                     if(confirm("이 마커를 삭제하시겠습니까?")) {
+                        // [수정] 삭제 시 말풍선도 닫기
+                        if (currentInfoWindow) {
+                            currentInfoWindow.close();
+                            currentInfoWindow = null;
+                        }
                         currentSites = currentSites.filter(function(item) { return item.id !== s.id; });
                         saveAndRender();
                     }
                 };
                 content.appendChild(delBtn);
 
-                var iw = new kakao.maps.InfoWindow({ content: content, removable: true });
-                kakao.maps.event.addListener(m, 'click', function() { iw.open(map, m); });
+                var iw = new kakao.maps.InfoWindow({ 
+                    content: content, 
+                    removable: true,
+                    zIndex: 10 // 말풍선이 다른 요소보다 위에 오도록 설정
+                });
+
+                kakao.maps.event.addListener(m, 'click', function() { 
+                    // [수정] 다른 마커 클릭 시 기존 말풍선 닫기
+                    if (currentInfoWindow) currentInfoWindow.close();
+                    iw.open(map, m);
+                    currentInfoWindow = iw; // 현재 열린 말풍선 저장
+                });
                 return m;
             });
             clusterer.addMarkers(markers);
