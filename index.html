@@ -1,267 +1,87 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>KESCO 현장 점검지도</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false"></script>
-    <style>
-        body { margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; overflow: hidden; background: #f0f2f5; }
-        #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; }
+// ... (기존 변수 선언부에 추가)
+var myLocMarker = null; // 원형 위치 표시 대신 방향 화살표 마커 사용
+var currentHeading = 0;
 
-        #upload-box {
-            position: absolute; top: 15px; left: 15px; z-index: 1001; 
-            background: rgba(255, 255, 255, 0.95); color: #333;
-            padding: 20px; border-radius: 14px; width: 260px;
-            box-shadow: 0 8px 30px rgba(0,0,0,0.15);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-            border: 1px solid #e1e4e8;
-        }
-
-        #upload-box.collapsed { 
-            width: 100px; padding: 0; height: 42px; border: none; background: transparent; box-shadow: none;
-        }
-        
-        #upload-box.collapsed h3, 
-        #upload-box.collapsed #menu-content { display: none; }
-
-        #toggle-btn {
-            cursor: pointer; background: #0055AA; border: none;
-            color: white; font-size: 13px; padding: 10px 15px; border-radius: 8px; 
-            font-weight: bold; width: 100%; transition: background 0.2s;
-            box-shadow: 0 4px 6px rgba(0,85,170,0.2);
-        }
-        #toggle-btn:hover { background: #003d7a; }
-        
-        #upload-box.collapsed #toggle-btn {
-            height: 42px; border-radius: 10px;
-        }
-
-        h3 { margin: 0 0 15px 0; font-size: 17px; color: #0055AA; display: flex; align-items: center; }
-        
-        .btn {
-            width: 100%; padding: 12px; margin-bottom: 8px; border: none;
-            border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px;
-            transition: opacity 0.2s;
-        }
-        .btn:active { opacity: 0.8; }
-
-        #upload-btn { background: #0055AA; color: white; }
-        #track-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
-        #clear-btn { background: #ffffff; color: #666; border: 1px solid #ddd; margin-top: 10px; }
-        
-        #status { margin-top: 10px; font-size: 12px; color: #666; text-align: center; }
-
-        .del-btn {
-            display: block; margin-top: 8px; background: #ef4444; color: white;
-            text-align: center; padding: 8px; border-radius: 6px;
-            font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer;
-        }
-    </style>
-</head>
-<body>
-    <div id="upload-box">
-        <button id="toggle-btn" onclick="toggleMenu()">접기 ▲</button>
-        <div style="height: 15px;"></div> <h3>📊 점검 관리</h3>
-        <div id="menu-content">
-            <input type="file" id="excel-file" accept=".xlsx, .xls" style="font-size:12px; margin-bottom:15px; width: 100%;">
-            <button id="upload-btn" class="btn">📍 엑셀 데이터 등록</button>
-            <button id="track-btn" class="btn">📡 위치 추적 시작</button>
-            <button id="clear-btn" class="btn">🔄 전체 초기화</button>
-            <div id="status">지도가 준비되었습니다.</div>
-        </div>
-    </div>
-    <div id="map"></div>
-
-    <script>
-        var map, clusterer, geocoder, myLocCircle;
-        var watchId = null;
-        var currentSites = [];
-        var currentInfoWindow = null; // [추가] 현재 열려있는 말풍선을 추적하기 위한 변수
-
-        function toggleMenu() {
-            var box = document.getElementById('upload-box');
-            var btn = document.getElementById('toggle-btn');
-            box.classList.toggle('collapsed');
-            
-            if(box.classList.contains('collapsed')) {
-                btn.innerText = '메뉴 펴기';
-            } else {
-                btn.innerText = '접기 ▲';
-            }
-        }
-
-        kakao.maps.load(function() {
-            map = new kakao.maps.Map(document.getElementById('map'), { 
-                center: new kakao.maps.LatLng(35.9180, 127.1241), 
-                level: 8 
-            });
-            
-            clusterer = new kakao.maps.MarkerClusterer({
-                map: map,
-                averageCenter: true,
-                minLevel: 6,
-                disableClickZoom: false,
-                styles: [{
-                    width : '40px', height : '40px',
-                    background: 'rgba(0, 85, 170, 0.9)',
-                    borderRadius: '20px', color: '#fff',
-                    textAlign: 'center', fontWeight: 'bold',
-                    lineHeight: '41px'
-                }]
-            });
-
-            geocoder = new kakao.maps.services.Geocoder();
-
-            // [추가] 지도 클릭 시 말풍선 닫기 이벤트
-            kakao.maps.event.addListener(map, 'click', function() {
-                if (currentInfoWindow) {
-                    currentInfoWindow.close();
-                    currentInfoWindow = null;
+// [추가] 방향 센서 권한 요청 및 리스너 등록
+function startOrientation() {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS (iPhone) 처리
+        DeviceOrientationEvent.requestPermission()
+            .then(response => {
+                if (response == 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
                 }
-            });
+            })
+            .catch(console.error);
+    } else {
+        // 안드로이드 및 기타
+        window.addEventListener('deviceorientation', handleOrientation);
+    }
+}
 
-            var saved = localStorage.getItem('kesco_map_data');
-            if(saved) {
-                currentSites = JSON.parse(saved);
-                drawMarkers();
+function handleOrientation(event) {
+    // alpha: 0~360도 (북쪽 기준 회전값)
+    var heading = event.webkitCompassHeading || (360 - event.alpha);
+    if (heading) {
+        currentHeading = heading;
+        if (myLocMarker) {
+            // 마커 내부의 화살표 이미지를 회전시킴
+            var arrow = document.getElementById('direction-arrow');
+            if (arrow) {
+                arrow.style.transform = 'rotate(' + currentHeading + 'deg)';
             }
+        }
+    }
+}
 
-            document.getElementById('upload-btn').onclick = function() {
-                var file = document.getElementById('excel-file').files[0];
-                if(!file) return alert("파일을 선택해주세요.");
+// [수정] 기존 track-btn 클릭 이벤트 내부
+document.getElementById('track-btn').onclick = function() {
+    if(watchId) {
+        // 추적 중단 로직
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        window.removeEventListener('deviceorientation', handleOrientation); // 센서 중단
+        if(myLocMarker) myLocMarker.setMap(null);
+        myLocMarker = null;
+        this.innerText = "📡 위치 추적 시작";
+        // ... (스타일 생략)
+    } else {
+        // 추적 시작 로직
+        startOrientation(); // 방향 센서 시작 (사용자 클릭 시점에 실행되어야 함)
+        
+        if(navigator.geolocation) {
+            watchId = navigator.geolocation.watchPosition(function(pos) {
+                var moveLoc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
                 
-                var reader = new FileReader();
-                reader.onload = function(e) {
-                    var workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                    var json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                    var successData = [];
-                    var count = 0;
-                    
-                    json.forEach(function(row, i) {
-                        setTimeout(function() {
-                            var addr = row['주소'];
-                            if(addr) {
-                                geocoder.addressSearch(addr, function(res, stat) {
-                                    if(stat === kakao.maps.services.Status.OK) {
-                                        successData.push({
-                                            id: Date.now() + i,
-                                            title: row['상호명'] || '이름없음',
-                                            lat: res[0].y, lng: res[0].x, addr: addr
-                                        });
-                                    }
-                                    count++;
-                                    document.getElementById('status').innerText = "변환 중: " + count + "/" + json.length;
-                                    if(count === json.length) {
-                                        currentSites = successData;
-                                        saveAndRender();
-                                        toggleMenu();
-                                    }
-                                });
-                            } else { count++; }
-                        }, i * 30);
+                if(!myLocMarker) {
+                    // 처음 위치를 잡을 때 방향 마커 생성
+                    // HTML로 커스텀 마커 제작 (화살표 포함)
+                    var content = document.createElement('div');
+                    content.innerHTML = `
+                        <div style="position:relative; width:40px; height:40px;">
+                            <div id="direction-arrow" style="position:absolute; top:0; left:12px; width:16px; height:20px; 
+                                 background:url('https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/direction_white.png') no-repeat; 
+                                 background-size:contain; transition: transform 0.1s; transform-origin: center 20px;">
+                            </div>
+                            <div style="position:absolute; top:12px; left:12px; width:16px; height:16px; 
+                                 background:#0055AA; border:2px solid white; border-radius:50%; box-shadow:0 0 5px rgba(0,0,0,0.3);">
+                            </div>
+                        </div>`;
+
+                    myLocMarker = new kakao.maps.CustomOverlay({
+                        position: moveLoc,
+                        content: content,
+                        xAnchor: 0.5,
+                        yAnchor: 0.5
                     });
-                };
-                reader.readAsArrayBuffer(file);
-            };
-
-            document.getElementById('track-btn').onclick = function() {
-                if(watchId) {
-                    navigator.geolocation.clearWatch(watchId);
-                    watchId = null;
-                    if(myLocCircle) myLocCircle.setMap(null);
-                    this.innerText = "📡 위치 추적 시작";
-                    this.style.background = "#f0f7ff";
-                    this.style.color = "#0055AA";
+                    myLocMarker.setMap(map);
                 } else {
-                    if(navigator.geolocation) {
-                        var self = this;
-                        watchId = navigator.geolocation.watchPosition(function(pos) {
-                            var moveLoc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-                            if(!myLocCircle) {
-                                myLocCircle = new kakao.maps.Circle({
-                                    center: moveLoc,
-                                    radius: 20,
-                                    strokeWeight: 3,
-                                    strokeColor: '#FFFFFF',
-                                    strokeOpacity: 1,
-                                    fillColor: '#0055AA',
-                                    fillOpacity: 1
-                                });
-                                myLocCircle.setMap(map);
-                            } else { myLocCircle.setCenter(moveLoc); }
-                            map.setCenter(moveLoc);
-                        });
-                        this.innerText = "🛑 추적 중단";
-                        this.style.background = "#333";
-                        this.style.color = "#fff";
-                    }
+                    myLocMarker.setPosition(moveLoc);
                 }
-            };
-
-            document.getElementById('clear-btn').onclick = function() {
-                if(confirm("모든 데이터를 삭제하시겠습니까?")) {
-                    localStorage.removeItem('kesco_map_data');
-                    location.reload();
-                }
-            };
-        });
-
-        function drawMarkers() {
-            clusterer.clear();
-            var markers = currentSites.map(function(s) {
-                var m = new kakao.maps.Marker({ position: new kakao.maps.LatLng(s.lat, s.lng) });
-                
-                var content = document.createElement('div');
-                content.style.padding = '12px';
-                content.style.background = 'white';
-                content.style.borderRadius = '10px';
-                content.style.fontSize = '13px';
-                content.style.width = '200px';
-                content.style.color = '#333';
-                content.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-                content.innerHTML = '<b style="color:#0055AA; font-size:14px;">'+s.title+'</b><div style="margin-top:5px; color:#666;">'+s.addr+'</div>' +
-                                    '<a href="https://map.kakao.com/link/to/'+s.title+','+s.lat+','+s.lng+'" target="_blank" style="display:block;margin-top:10px;background:#0055AA;text-align:center;padding:8px;border-radius:6px;text-decoration:none;color:white;font-weight:bold;">길찾기</a>';
-                
-                var delBtn = document.createElement('button');
-                delBtn.className = 'del-btn';
-                delBtn.innerText = '✅ 점검 완료 (삭제)';
-                delBtn.onclick = function() {
-                    if(confirm("이 마커를 삭제하시겠습니까?")) {
-                        // [수정] 삭제 시 말풍선도 닫기
-                        if (currentInfoWindow) {
-                            currentInfoWindow.close();
-                            currentInfoWindow = null;
-                        }
-                        currentSites = currentSites.filter(function(item) { return item.id !== s.id; });
-                        saveAndRender();
-                    }
-                };
-                content.appendChild(delBtn);
-
-                var iw = new kakao.maps.InfoWindow({ 
-                    content: content, 
-                    removable: true,
-                    zIndex: 10 // 말풍선이 다른 요소보다 위에 오도록 설정
-                });
-
-                kakao.maps.event.addListener(m, 'click', function() { 
-                    // [수정] 다른 마커 클릭 시 기존 말풍선 닫기
-                    if (currentInfoWindow) currentInfoWindow.close();
-                    iw.open(map, m);
-                    currentInfoWindow = iw; // 현재 열린 말풍선 저장
-                });
-                return m;
+                map.setCenter(moveLoc);
             });
-            clusterer.addMarkers(markers);
+            this.innerText = "🛑 추적 중단";
+            // ... (스타일 생략)
         }
-
-        function saveAndRender() {
-            localStorage.setItem('kesco_map_data', JSON.stringify(currentSites));
-            drawMarkers();
-            document.getElementById('status').innerText = currentSites.length + "개의 마커 표시 중";
-        }
-    </script>
-</body>
-</html>
+    }
+};
