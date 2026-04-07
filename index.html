@@ -47,7 +47,6 @@
         .nav-btn { display: block; background: #0055AA; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; margin-top: 8px; }
         .del-btn { display: block; margin-top: 5px; background: #fecaca; color: #b91c1c; text-align: center; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
 
-        /* [수정] 현위치 방향 화살표 (SVG 데이터 내장으로 무조건 렌더링) */
         .my-location-marker { position: relative; width: 50px; height: 50px; pointer-events: none; }
         .direction-arrow { 
             position: absolute; top: 0px; left: 15px; width: 20px; height: 25px; 
@@ -68,13 +67,13 @@
         
         <div class="map-type-wrapper" style="margin-top:15px;">
             <button id="btn-road" class="m-type-btn active" onclick="setMapType('roadmap')">일반지도</button>
-            <button id="btn-sky" class="m-type-btn inactive" onclick="setMapType('skyview')">위성사진</button>
+            <button id="btn-sky" class="m-type-btn inactive" onclick="setMapType('skyview')">위성지도</button>
         </div>
 
-        <h3>📊 점검 지도</h3>
+        <h3>📊 점검 지도 ver.2</h3>
         <div id="menu-content">
             <input type="file" id="excel-file" accept=".xlsx, .xls" style="font-size:12px; margin-bottom:15px; width: 100%;">
-            <button id="upload-btn" class="btn">📍 엑셀 데이터 등록</button>
+            <button id="upload-btn" class="btn">📍 엑셀 데이터 표출</button>
             <button id="track-btn" class="btn">📡 위치 표기 시작</button>
             <button id="clear-btn" class="btn">🔄 전체 초기화</button>
             <div id="status">지도를 길게 눌러 핀 추가</div>
@@ -112,18 +111,16 @@
             }
         }
 
-        // [수정] 안드로이드 기기 센서 충돌 방지 로직
         var isAbsoluteOrientation = false;
         function handleOrientation(event) {
             var heading = null;
-            
             if (event.webkitCompassHeading !== undefined) {
-                heading = event.webkitCompassHeading; // iOS (아이폰)
+                heading = event.webkitCompassHeading;
             } else if (event.absolute === true && event.alpha !== null) {
                 isAbsoluteOrientation = true;
-                heading = 360 - event.alpha; // 안드로이드 (절대 좌표 최우선 적용)
+                heading = 360 - event.alpha;
             } else if (!isAbsoluteOrientation && event.alpha !== null) {
-                heading = 360 - event.alpha; // 안드로이드 (상대 좌표 대체용)
+                heading = 360 - event.alpha;
             }
 
             if (heading !== null) {
@@ -208,18 +205,20 @@
             reader.readAsArrayBuffer(file);
         };
 
-        // [수정] 위치 추적 시작/중단 시 센서 이벤트 깔끔하게 정리
+        // [수정] 위치 추적 로직 (화면 강제 이동 제거)
         document.getElementById('track-btn').onclick = function() {
             if(watchId) {
+                // 추적 중단
                 navigator.geolocation.clearWatch(watchId); watchId = null;
                 window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
                 window.removeEventListener('deviceorientation', handleOrientation, true);
-                isAbsoluteOrientation = false; // 상태 초기화
+                isAbsoluteOrientation = false; 
                 if(myLocMarker) myLocMarker.setMap(null); myLocMarker = null;
                 this.innerText = "📡 위치 표기 시작";
                 this.style.background = "#f0f7ff";
                 this.style.color = "#0055AA";
             } else {
+                // 추적 시작
                 if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
                     DeviceOrientationEvent.requestPermission().then(res => { if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation, true); });
                 } else { 
@@ -230,15 +229,21 @@
                 if(navigator.geolocation) {
                     watchId = navigator.geolocation.watchPosition(function(pos) {
                         var moveLoc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+                        
                         if(!myLocMarker) {
+                            // 최초 1회만 마커를 생성하고 내 위치로 지도를 이동시킵니다.
                             var content = document.createElement('div');
                             content.className = 'my-location-marker';
                             content.innerHTML = '<div id="direction-arrow" class="direction-arrow"></div><div class="location-dot"></div>';
                             myLocMarker = new kakao.maps.CustomOverlay({ position: moveLoc, content: content, xAnchor: 0.5, yAnchor: 0.5 });
                             myLocMarker.setMap(map);
-                        } else { myLocMarker.setPosition(moveLoc); }
-                        map.setCenter(moveLoc);
+                            map.setCenter(moveLoc); // 최초 클릭 시에만 화면 이동
+                        } else { 
+                            // 이후부터는 마커만 이동하고 지도는 그대로 둡니다.
+                            myLocMarker.setPosition(moveLoc); 
+                        }
                     }, null, { enableHighAccuracy: true });
+                    
                     this.innerText = "🛑 표기 중단";
                     this.style.background = "#333"; this.style.color = "#fff";
                 }
