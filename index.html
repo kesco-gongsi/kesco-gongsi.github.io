@@ -27,7 +27,7 @@
         h3 { margin: 15px 0 10px 0; font-size: 17px; color: #0055AA; display: flex; align-items: center; }
         
         .map-type-wrapper { display: flex; gap: 5px; margin-bottom: 15px; }
-        .m-type-btn { flex: 1; padding: 8px; font-size: 12px; font-weight: bold; border: 1px solid #0055AA; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+        .m-type-btn { flex: 1; padding: 8px; font-size: 12px; font-weight: bold; border: 1px solid #0055AA; border-radius: 6px; cursor: pointer; transition: 0.2s; word-break: keep-all; }
         .m-type-btn.active { background: #0055AA; color: white; }
         .m-type-btn.inactive { background: white; color: #0055AA; }
 
@@ -68,6 +68,7 @@
         <div class="map-type-wrapper" style="margin-top:15px;">
             <button id="btn-road" class="m-type-btn active" onclick="setMapType('roadmap')">일반지도</button>
             <button id="btn-sky" class="m-type-btn inactive" onclick="setMapType('skyview')">위성지도</button>
+            <button id="btn-district" class="m-type-btn inactive" onclick="toggleDistrict()">지적편집도</button>
         </div>
 
         <h3>📊 점검 지도 ver.2</h3>
@@ -87,6 +88,7 @@
         var currentSites = [];
         var currentInfoWindow = null;
         var myLocMarker = null;
+        var isDistrictOn = false; // 지적편집도 상태 변수
 
         var colorMap = { 1: "#0055AA", 2: "#EF4444", 3: "#22C55E", 4: "#F97316", 5: "#A855F7", 6: "#EC4899", 7: "#EAB308", 8: "#06B6D4", 9: "#78350F", 10: "#1F2937" };
 
@@ -108,6 +110,20 @@
                 map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
                 skyBtn.className = 'm-type-btn active';
                 roadBtn.className = 'm-type-btn inactive';
+            }
+        }
+
+        // 지적편집도 토글 함수
+        function toggleDistrict() {
+            var btn = document.getElementById('btn-district');
+            if (isDistrictOn) {
+                map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+                btn.className = 'm-type-btn inactive';
+                isDistrictOn = false;
+            } else {
+                map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+                btn.className = 'm-type-btn active';
+                isDistrictOn = true;
             }
         }
 
