@@ -7,7 +7,6 @@
     <title>KESCO 현장 점검지도</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
     
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false"></script>
     <style>
@@ -37,12 +36,8 @@
         .btn { width: 100%; padding: 12px; margin-bottom: 8px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 13px; }
         #upload-btn { background: #0055AA; color: white; }
         #track-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
-        #pole-search-btn { background: #EAB308; color: #fff; margin-top: 5px; } 
         #clear-btn { background: #ffffff; color: #666; border: 1px solid #ddd; margin-top: 10px; }
         #status { margin-top: 10px; font-size: 12px; color: #666; text-align: center; font-weight: bold; }
-
-        .input-group { display: flex; gap: 5px; margin-bottom: 15px; }
-        .input-group input { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; }
 
         .iw-container { background-color: #ffffff !important; color: #333333 !important; }
         .iw-item { border-bottom: 1px solid #eee; padding: 12px 0; }
@@ -78,14 +73,6 @@
 
         <h3>📊 점검 지도 ver.3</h3>
         <div id="menu-content">
-            <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #333;">⚡ 인입주(전주) 검색</div>
-            <div class="input-group">
-                <input type="text" id="pole-input" placeholder="전산화번호 8자리 (예: 9215W452)" maxlength="8">
-            </div>
-            <button id="pole-search-btn" class="btn" onclick="searchPole()">🔍 최단거리 전주 찾기</button>
-            
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
-
             <input type="file" id="excel-file" accept=".xlsx, .xls" style="font-size:12px; margin-bottom:15px; width: 100%;">
             <button id="upload-btn" class="btn">📍 엑셀 데이터 표출</button>
             <button id="track-btn" class="btn">📡 위치 표기 시작</button>
@@ -104,9 +91,6 @@
         var isDistrictOn = false;
 
         var colorMap = { 1: "#0055AA", 2: "#EF4444", 3: "#22C55E", 4: "#F97316", 5: "#A855F7", 6: "#EC4899", 7: "#EAB308", 8: "#06B6D4", 9: "#78350F", 10: "#1F2937" };
-
-        // ★ Proj4js 한전 TM 좌표계 (Bessel 중부원점 EPSG:5174 기준) 수학적 정의
-        proj4.defs("EPSG:5174", "+proj=tmerc +lat_0=38 +lon_0=127.0028902777778 +k=1 +x_0=200000 +y_0=500000 +ellps=bessel +units=m +no_defs +towgs84=-115.80,474.99,674.11,1.16,-2.31,-1.63,6.43");
 
         function toggleMenu() {
             var box = document.getElementById('upload-box');
@@ -162,74 +146,6 @@
             var saved = localStorage.getItem('kesco_map_data');
             if(saved) { currentSites = JSON.parse(saved); drawMarkers(); }
         });
-
-        // ==========================================
-        // ⚡ 전산화번호 변환 & 최단거리 필터링 알고리즘
-        // ==========================================
-        function searchPole() {
-            var poleNum = document.getElementById('pole-input').value.toUpperCase().trim();
-            // 정규식: 숫자2 + 숫자2 + 영문자1 + 숫자3
-            var regex = /^(\d{2})(\d{2})([A-Z])(\d{3})$/;
-            var match = poleNum.match(regex);
-            
-            if (!match) {
-                alert("전산화번호 8자리를 정확히 입력해주세요. (예: 9215W452)");
-                return;
-            }
-
-            var xx = parseInt(match[1], 10);
-            var yy = parseInt(match[2], 10);
-            
-            // 1. 기준점 잡기 (현재 지도 중심)
-            var centerLat = map.getCenter().getLat();
-            var centerLng = map.getCenter().getLng();
-            
-            // 기준점을 위경도(WGS84)에서 한전좌표계(TM)로 계산
-            var centerTM = proj4("WGS84", "EPSG:5174", [centerLng, centerLat]);
-
-            // 2. 한전 NDIS 100km 중복 좌표 후보군 생성 (대한민국 전체 커버)
-            var xBases = [1, 2, 3, 4, 5]; // 100km ~ 500km
-            var yBases = [1, 2, 3, 4, 5, 6, 7]; // 100km ~ 700km
-            var candidates = [];
-
-            // 세부 오프셋 (알파벳+숫자3) - 현재는 1km 격자의 중앙(500m)으로 일괄 할당
-            // (KESCO 내부에 세부 격자 오프셋 공식이 있다면 이 숫자를 공식으로 교체하면 1m 오차로 정밀해집니다)
-            var offsetX = 500; 
-            var offsetY = 500;
-
-            for (var i = 0; i < xBases.length; i++) {
-                for (var j = 0; j < yBases.length; j++) {
-                    var candX = (xBases[i] * 100000) + (xx * 1000) + offsetX;
-                    var candY = (yBases[j] * 100000) + (yy * 1000) + offsetY;
-                    
-                    // 중심점과의 유클리드 직선거리 계산 (TM좌표계는 미터법이라 즉시 계산 가능)
-                    var dist = Math.sqrt(Math.pow(centerTM[0] - candX, 2) + Math.pow(centerTM[1] - candY, 2));
-                    candidates.push({ x: candX, y: candY, dist: dist });
-                }
-            }
-
-            // 3. 최단거리 필터링 (내 위치에서 가장 가까운 단 1개의 진짜 좌표 추출)
-            candidates.sort(function(a, b) { return a.dist - b.dist; });
-            var bestMatch = candidates[0];
-
-            // 4. 추출된 진짜 TM 좌표를 지도에 찍을 수 있게 위경도(WGS84)로 최종 변환
-            var wgs84 = proj4("EPSG:5174", "WGS84", [bestMatch.x, bestMatch.y]);
-            var targetLat = wgs84[1];
-            var targetLng = wgs84[0];
-
-            // 지도에 전주 마커 생성 및 이동
-            var poleSite = {
-                id: Date.now(), title: "전주: " + poleNum, lat: targetLat, lng: targetLng,
-                addr: "거리 기반 자동 매칭 위치", colorCode: 7, isAbsent: false, memo: "전국 중복좌표 필터링 완료"
-            };
-            
-            currentSites.push(poleSite);
-            saveAndRender();
-            
-            var moveLoc = new kakao.maps.LatLng(targetLat, targetLng);
-            map.setCenter(moveLoc);
-            map.setLevel(2); // 로드뷰와 전주가 잘 보이도록 지도 바짝 확대
-        }
 
         function addManualMarker(latLng) {
             var title = prompt("📍 새로운 장소의 상호를 입력하세요:", "");
