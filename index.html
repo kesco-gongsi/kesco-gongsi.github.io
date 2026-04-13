@@ -95,7 +95,6 @@
         <h3>📊 점검 지도 ver.9</h3>
         <div id="menu-content">
 
-            <!-- 인입주 검색 -->
             <div style="font-size:13px;font-weight:bold;margin-bottom:5px;color:#333;">⚡ 인입주(전주) 검색</div>
             <div class="input-group">
                 <input type="text" id="pole-input" placeholder="인입주번호 8자리 입력" maxlength="8">
@@ -104,7 +103,6 @@
 
             <hr class="section-divider">
 
-            <!-- 마커 필터링 -->
             <div style="font-size:13px;font-weight:bold;margin-bottom:8px;color:#333;">🔽 마커 필터링</div>
             <div class="filter-section">
                 <div class="filter-section-title">색상 코드</div>
@@ -121,7 +119,6 @@
 
             <hr class="section-divider">
 
-            <!-- 엑셀 업로드 -->
             <input type="file" id="excel-file" accept=".xlsx,.xls" style="font-size:12px;margin-bottom:15px;width:100%;">
             <button id="upload-btn" class="btn">📍 엑셀 데이터 표출</button>
             <button id="track-btn" class="btn">📡 위치 표기 시작</button>
@@ -309,7 +306,7 @@
                     position: new kakao.maps.LatLng(s.lat, s.lng),
                     content: content,
                     xAnchor: 0.5, yAnchor: 2.5,
-                    zIndex: 5
+                    zIndex: 2 // 인포윈도우(기본 zIndex 10 이상)보다 아래에 위치하도록 zIndex 낮춤
                 });
                 overlay.setMap(map);
                 routeOverlays.push(overlay);
@@ -322,7 +319,8 @@
                 strokeWeight: 2,
                 strokeColor: '#15803d',
                 strokeOpacity: 0.6,
-                strokeStyle: 'dashed'
+                strokeStyle: 'dashed',
+                zIndex: 1 // 선은 더 아래로
             });
             polyline.setMap(map);
             routeOverlays.push(polyline);
@@ -443,7 +441,7 @@
                         if (!myLocMarker) {
                             var content = document.createElement('div'); content.className = 'my-location-marker';
                             content.innerHTML = '<div id="direction-arrow" class="direction-arrow"></div><div class="location-dot"></div>';
-                            myLocMarker = new kakao.maps.CustomOverlay({ position: moveLoc, content, xAnchor: 0.5, yAnchor: 0.5 });
+                            myLocMarker = new kakao.maps.CustomOverlay({ position: moveLoc, content, xAnchor: 0.5, yAnchor: 0.5, zIndex: 10 }); // 위치 마커도 위로
                             myLocMarker.setMap(map); map.setCenter(moveLoc);
                         } else { myLocMarker.setPosition(moveLoc); }
                         if (isRouteOn) drawMarkers();
@@ -538,7 +536,8 @@
                 });
 
                 container.appendChild(listArea);
-                var iw = new kakao.maps.InfoWindow({ content: container, removable: true });
+                // zIndex 속성을 추가하여 인포윈도우가 최상단에 오도록 설정
+                var iw = new kakao.maps.InfoWindow({ content: container, removable: true, zIndex: 99 });
                 kakao.maps.event.addListener(m, 'click', function() {
                     if (currentInfoWindow) currentInfoWindow.close();
                     iw.open(map, m); currentInfoWindow = iw;
