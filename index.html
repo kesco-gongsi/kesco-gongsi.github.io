@@ -13,7 +13,6 @@
         body { margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; overflow: hidden; background: #f0f2f5; color: #333; }
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; background-color: #f9f9f9; }
 
-        /* 스크롤 분리 및 상단 고정을 위한 Flexbox 적용 */
         #upload-box {
             position: absolute; top: 15px; left: 15px; z-index: 1001;
             background: rgba(255,255,255,0.95); color: #333;
@@ -81,7 +80,6 @@
         .rv-btn { flex: 1; display: block; background: #22C55E; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; }
         .del-btn { display: block; margin-top: 5px; background: #fecaca; color: #b91c1c; text-align: center; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
 
-        /* 🔥 수정됨: 번지수가 짤리지 않도록 너비 확장 및 CSS 기반 말줄임 처리 */
         .marker-label {
             position: absolute;
             left: 50%;
@@ -94,7 +92,7 @@
             padding: 3px 6px;
             border-radius: 4px;
             white-space: nowrap;
-            max-width: 160px; /* 기존 120px에서 너비 확대 */
+            max-width: 160px; 
             overflow: hidden;
             text-overflow: ellipsis;
             box-shadow: 0 1px 4px rgba(0,0,0,0.2);
@@ -616,22 +614,19 @@
             }
         };
 
-        // 🔥 수정됨: 지능적으로 주소를 자르는 함수
+        // 🔥 수정됨: 영문 쓰레기값 제거 및 마지막 3어절 추출
         function buildLabelHtml(labelText, color) {
             if (!isLabelOn || !labelText) return '';
             
-            var parts = labelText.trim().split(/\s+/);
-            var short = labelText;
+            // 데이터 끝에 붙은 'BL', 'ri', 'r', 'R' 등 영문자와 공백만 있는 경우 제거
+            var cleanedLabel = labelText.replace(/(\s+[a-zA-Z]+)+$/g, '').trim();
             
-            // 어절이 3개 이상일 때만 뒷부분을 살림
+            var parts = cleanedLabel.split(/\s+/);
+            var short = cleanedLabel;
+            
+            // 어절이 3개 이상일 때 마지막 3어절만 추출 (예: '계북면 원촌리 123-4')
             if (parts.length > 3) {
-                // 끝이 'BL' 처럼 불필요한 단어로 끝나면 4어절을 추출 (예: 장계면 장계리 294-27 BL)
-                if (parts[parts.length - 1].toUpperCase() === 'BL') {
-                    short = parts.slice(Math.max(0, parts.length - 4)).join(' ');
-                } else {
-                    // 보통 끝에서 3어절을 가져오면 "동/리 + 번지/도로명 + 번호" 형태가 됨
-                    short = parts.slice(-3).join(' ');
-                }
+                short = parts.slice(-3).join(' ');
             }
             
             return `<div class="marker-label" style="border-top: 2px solid ${color};">${short}</div>`;
@@ -650,7 +645,7 @@
                 var mColor = colorMap[first.colorCode] || "#0055AA";
                 var isPole = first.viewMode === 'pole';
                 
-                // 🔥 수정됨: 시스템이 파악한 상세 주소(first.addr)를 무조건 최우선으로 사용하여 번지수 누락 방지
+                // 시스템이 파악한 상세 주소(first.addr)를 무조건 최우선으로 사용
                 var labelText = first.addr || first.addrText || first.title || '';
                 var labelHtml = buildLabelHtml(labelText, mColor);
 
