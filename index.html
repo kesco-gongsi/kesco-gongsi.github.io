@@ -13,7 +13,7 @@
         body { margin: 0; padding: 0; font-family: 'Pretendard', sans-serif; overflow: hidden; background: #f0f2f5; color: #333; }
         #map { width: 100%; height: 100vh; position: absolute; top: 0; left: 0; background-color: #f9f9f9; }
 
-        /* 🔥 스크롤 분리 및 상단 고정을 위한 Flexbox 적용 */
+        /* 스크롤 분리 및 상단 고정을 위한 Flexbox 적용 */
         #upload-box {
             position: absolute; top: 15px; left: 15px; z-index: 1001;
             background: rgba(255,255,255,0.95); color: #333;
@@ -24,13 +24,12 @@
             border: 1px solid #e1e4e8;
             box-sizing: border-box; 
             max-height: calc(100dvh - 30px);
-            display: flex; flex-direction: column; /* 자식 요소들을 세로로 정렬 */
+            display: flex; flex-direction: column;
         }
         
         #upload-box.collapsed { width: 110px; padding: 0; height: 42px; border: none; background: transparent; box-shadow: none; display: block; }
         #upload-box.collapsed h3, #upload-box.collapsed #menu-content, #upload-box.collapsed .map-type-wrapper { display: none; }
 
-        /* 상단 고정 영역 (flex-shrink: 0 속성으로 크기 축소 방지) */
         #toggle-btn { flex-shrink: 0; cursor: pointer; background: #0055AA; border: none; color: white; font-size: 13px; padding: 10px 15px; border-radius: 8px; font-weight: bold; width: 100%; }
         .map-type-wrapper { flex-shrink: 0; display: flex; gap: 5px; margin-top: 15px; margin-bottom: 5px; }
         h3 { flex-shrink: 0; margin: 10px 0 10px 0; font-size: 17px; color: #0055AA; display: flex; align-items: center; }
@@ -39,13 +38,11 @@
         .m-type-btn.active { background: #0055AA; color: white; }
         .m-type-btn.inactive { background: white; color: #0055AA; }
 
-        /* 🔥 스크롤이 발생하는 메뉴 컨텐츠 영역 */
         #menu-content { 
-            flex-grow: 1; min-height: 0; /* 독립 스크롤을 위한 핵심 속성 */
+            flex-grow: 1; min-height: 0; 
             overflow-y: auto; 
             padding-right: 5px; padding-bottom: 10px;
         }
-        /* 스크롤바 디자인 */
         #menu-content::-webkit-scrollbar { width: 4px; }
         #menu-content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
@@ -84,7 +81,7 @@
         .rv-btn { flex: 1; display: block; background: #22C55E; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; }
         .del-btn { display: block; margin-top: 5px; background: #fecaca; color: #b91c1c; text-align: center; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
 
-        /* 마커 주소 라벨 스타일 (수정됨) */
+        /* 🔥 수정됨: 번지수가 짤리지 않도록 너비 확장 및 CSS 기반 말줄임 처리 */
         .marker-label {
             position: absolute;
             left: 50%;
@@ -92,12 +89,12 @@
             transform: translate(-50%, -100%);
             background: rgba(255,255,255,0.92);
             color: #333;
-            font-size: 10px;
+            font-size: 11px;
             font-weight: bold;
-            padding: 2px 6px;
+            padding: 3px 6px;
             border-radius: 4px;
             white-space: nowrap;
-            max-width: 120px;
+            max-width: 160px; /* 기존 120px에서 너비 확대 */
             overflow: hidden;
             text-overflow: ellipsis;
             box-shadow: 0 1px 4px rgba(0,0,0,0.2);
@@ -214,7 +211,7 @@
         var isDistrictOn = false;
         var isAbsoluteOrientation = false;
         var isClusteringOn = true;
-        var isLabelOn = true;         // ★ 주소 라벨 변수 초기화
+        var isLabelOn = true;
         var standaloneMarkers = [];
 
         var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]);
@@ -282,7 +279,6 @@
             drawMarkers();
         }
 
-        // ★ 주소 라벨 표시 버튼 이벤트
         document.getElementById('label-btn').onclick = function() {
             isLabelOn = !isLabelOn;
             this.innerText = isLabelOn ? '🏷️ 주소 라벨 표시 ON' : '🏷️ 주소 라벨 표시 OFF';
@@ -620,17 +616,27 @@
             }
         };
 
-        // ★ 주소 라벨 생성 헬퍼
+        // 🔥 수정됨: 지능적으로 주소를 자르는 함수
         function buildLabelHtml(labelText, color) {
             if (!isLabelOn || !labelText) return '';
+            
+            var parts = labelText.trim().split(/\s+/);
             var short = labelText;
-            var parts = labelText.split(' ');
-            if (parts.length > 3) short = parts.slice(-3).join(' ');
-            if (short.length > 18) short = short.substring(0, 16) + '…';
+            
+            // 어절이 3개 이상일 때만 뒷부분을 살림
+            if (parts.length > 3) {
+                // 끝이 'BL' 처럼 불필요한 단어로 끝나면 4어절을 추출 (예: 장계면 장계리 294-27 BL)
+                if (parts[parts.length - 1].toUpperCase() === 'BL') {
+                    short = parts.slice(Math.max(0, parts.length - 4)).join(' ');
+                } else {
+                    // 보통 끝에서 3어절을 가져오면 "동/리 + 번지/도로명 + 번호" 형태가 됨
+                    short = parts.slice(-3).join(' ');
+                }
+            }
+            
             return `<div class="marker-label" style="border-top: 2px solid ${color};">${short}</div>`;
         }
 
-        // ★ 마커 생성 로직 고도화 (CustomOverlay 활용)
         function buildMarkerObjects(sites) {
             var groups = {};
             sites.forEach(function(s) {
@@ -644,14 +650,14 @@
                 var mColor = colorMap[first.colorCode] || "#0055AA";
                 var isPole = first.viewMode === 'pole';
                 
-                var labelText = first.addrText || first.addr || first.title || '';
+                // 🔥 수정됨: 시스템이 파악한 상세 주소(first.addr)를 무조건 최우선으로 사용하여 번지수 누락 방지
+                var labelText = first.addr || first.addrText || first.title || '';
                 var labelHtml = buildLabelHtml(labelText, mColor);
 
                 var svgPath = isPole 
                     ? `<path d="M8 0 L22 0 L30 15 L15 40 L0 15 L8 0 Z" fill="${mColor}"/><circle cx="15" cy="12" r="5" fill="white"/>` 
                     : `<path d="M15 0C6.716 0 0 6.716 0 15c0 11.25 15 25 15 25s15-13.75 15-25c0-8.284-6.716-15-15-15z" fill="${mColor}"/><circle cx="15" cy="15" r="6" fill="white"/>`;
 
-                // 기존 MarkerImage 대신 HTML DOM 노드(CustomOverlay)를 만들어 마커처럼 활용
                 var markerContent = document.createElement('div');
                 markerContent.style.cssText = "position:relative; display:inline-block; text-align:center; cursor:pointer;";
                 markerContent.innerHTML = `
@@ -660,7 +666,6 @@
                          style="width:30px;height:40px;display:block;" />
                 `;
 
-                // yAnchor: 1 설정으로 라벨 높이와 관계없이 핀 끝이 고정됨
                 var m = new kakao.maps.CustomOverlay({ 
                     position: new kakao.maps.LatLng(first.lat, first.lng), 
                     content: markerContent,
@@ -670,7 +675,6 @@
                 var container = document.createElement('div'); container.className = 'iw-container';
                 container.style.cssText = 'padding:15px;background:#fff;border-radius:12px;width:240px;box-shadow:0 4px 15px rgba(0,0,0,0.15); border:1px solid #ddd; position:relative; cursor:default;';
                 
-                // 자체 닫기 버튼
                 var closeBtn = document.createElement('div');
                 closeBtn.innerHTML = '✕';
                 closeBtn.style.cssText = 'position:absolute; top:10px; right:10px; cursor:pointer; font-size:14px; color:#999; z-index:100; padding:5px; font-weight:bold;';
@@ -742,17 +746,16 @@
                 
                 container.appendChild(listArea);
 
-                // 인포윈도우도 CustomOverlay로 띄워서 정확한 오프셋 및 겹침 제어
                 var iwContent = document.createElement('div');
-                iwContent.style.cssText = 'position:absolute; bottom:45px; left:-120px; z-index:99;'; // 마커 위쪽으로 올라가도록 오프셋 조정
+                iwContent.style.cssText = 'position:absolute; bottom:45px; left:-120px; z-index:99;'; 
                 iwContent.appendChild(container);
 
                 var iwOverlay = new kakao.maps.CustomOverlay({
                     content: iwContent,
                     position: new kakao.maps.LatLng(first.lat, first.lng),
-                    yAnchor: 1, // 마커 바닥을 기준으로 위치
+                    yAnchor: 1, 
                     zIndex: 99,
-                    clickable: true // 클릭 가능해야 내용 스크롤/버튼작동 가능
+                    clickable: true 
                 });
 
                 closeBtn.onclick = function(e) { e.stopPropagation(); iwOverlay.setMap(null); currentInfoWindow = null; };
