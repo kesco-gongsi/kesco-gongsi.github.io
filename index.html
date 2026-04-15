@@ -54,6 +54,8 @@
         #track-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
         #cluster-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
         #cluster-btn.off { background: #fff0f0; color: #b91c1c; border: 1px solid #b91c1c; }
+        #label-btn { background: #f0f7ff; color: #0055AA; border: 1px solid #0055AA; }
+        #label-btn.off { background: #f5f5f5; color: #999; border: 1px solid #ccc; }
         #clear-btn { background: #ffffff; color: #666; border: 1px solid #ddd; margin-top: 10px; }
         #status { margin-top: 10px; font-size: 12px; color: #666; text-align: center; font-weight: bold; }
 
@@ -81,6 +83,28 @@
         .nav-btn { flex: 1; display: block; background: #0055AA; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; }
         .rv-btn { flex: 1; display: block; background: #22C55E; color: white; text-align: center; padding: 8px; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold; }
         .del-btn { display: block; margin-top: 5px; background: #fecaca; color: #b91c1c; text-align: center; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
+
+        /* 마커 주소 라벨 스타일 (수정됨) */
+        .marker-label {
+            position: absolute;
+            left: 50%;
+            top: -4px;
+            transform: translate(-50%, -100%);
+            background: rgba(255,255,255,0.92);
+            color: #333;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+            pointer-events: none;
+            border: 1px solid rgba(0,0,0,0.1);
+            line-height: 1.4;
+        }
 
         .my-location-marker { position: relative; width: 50px; height: 50px; pointer-events: none; }
         .direction-arrow { position: absolute; top: 0px; left: 15px; width: 20px; height: 25px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23EF4444'%3E%3Cpath d='M12 2L22 20L12 17L2 20L12 2Z'/%3E%3C/svg%3E"); background-size: contain; background-repeat: no-repeat; background-position: center; transform-origin: center bottom; z-index: 2; transition: transform 0.1s ease-out; }
@@ -161,6 +185,7 @@
             <button id="upload-btn" class="btn">📍 엑셀 데이터 표출</button>
             <button id="track-btn" class="btn">📡 위치 표기 시작</button>
             <button id="cluster-btn" class="btn">🔵 클러스터링 ON</button>
+            <button id="label-btn" class="btn">🏷️ 주소 라벨 표시 ON</button>
             <button id="clear-btn" class="btn">🔄 전체 초기화</button>
             <div id="status">지도를 길게 눌러 핀 추가</div>
             
@@ -189,6 +214,7 @@
         var isDistrictOn = false;
         var isAbsoluteOrientation = false;
         var isClusteringOn = true;
+        var isLabelOn = true;         // ★ 주소 라벨 변수 초기화
         var standaloneMarkers = [];
 
         var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]);
@@ -255,6 +281,14 @@
             quickSearchKeyword = inputVal.toLowerCase();
             drawMarkers();
         }
+
+        // ★ 주소 라벨 표시 버튼 이벤트
+        document.getElementById('label-btn').onclick = function() {
+            isLabelOn = !isLabelOn;
+            this.innerText = isLabelOn ? '🏷️ 주소 라벨 표시 ON' : '🏷️ 주소 라벨 표시 OFF';
+            this.classList.toggle('off', !isLabelOn);
+            drawMarkers();
+        };
 
         function getFilteredSites() {
             var results = [];
@@ -357,7 +391,9 @@
             clusterer = new kakao.maps.MarkerClusterer({ map: map, averageCenter: true, minLevel: 6, styles: [{ width:'40px', height:'40px', background:'rgba(0,85,170,0.9)', borderRadius:'20px', color:'#fff', textAlign:'center', fontWeight:'bold', lineHeight:'41px' }] });
             geocoder = new kakao.maps.services.Geocoder();
             kakao.maps.event.addListener(map, 'rightclick', function(mouseEvent) { addManualMarker(mouseEvent.latLng); });
-            kakao.maps.event.addListener(map, 'click', function() { if (currentInfoWindow) { currentInfoWindow.close(); currentInfoWindow = null; } });
+            kakao.maps.event.addListener(map, 'click', function() { 
+                if (currentInfoWindow) { currentInfoWindow.setMap(null); currentInfoWindow = null; } 
+            });
             buildColorChips();
             
             var saved = localStorage.getItem('kesco_map_data');
@@ -540,7 +576,7 @@
                 });
 
                 currentSites = newSites;
-                quickSearchKeyword = ""; // 업로드 시 검색 초기화
+                quickSearchKeyword = ""; 
                 document.getElementById('quick-search-input').value = "";
                 saveAndRender();
                 
@@ -584,6 +620,17 @@
             }
         };
 
+        // ★ 주소 라벨 생성 헬퍼
+        function buildLabelHtml(labelText, color) {
+            if (!isLabelOn || !labelText) return '';
+            var short = labelText;
+            var parts = labelText.split(' ');
+            if (parts.length > 3) short = parts.slice(-3).join(' ');
+            if (short.length > 18) short = short.substring(0, 16) + '…';
+            return `<div class="marker-label" style="border-top: 2px solid ${color};">${short}</div>`;
+        }
+
+        // ★ 마커 생성 로직 고도화 (CustomOverlay 활용)
         function buildMarkerObjects(sites) {
             var groups = {};
             sites.forEach(function(s) {
@@ -597,19 +644,40 @@
                 var mColor = colorMap[first.colorCode] || "#0055AA";
                 var isPole = first.viewMode === 'pole';
                 
+                var labelText = first.addrText || first.addr || first.title || '';
+                var labelHtml = buildLabelHtml(labelText, mColor);
+
                 var svgPath = isPole 
                     ? `<path d="M8 0 L22 0 L30 15 L15 40 L0 15 L8 0 Z" fill="${mColor}"/><circle cx="15" cy="12" r="5" fill="white"/>` 
                     : `<path d="M15 0C6.716 0 0 6.716 0 15c0 11.25 15 25 15 25s15-13.75 15-25c0-8.284-6.716-15-15-15z" fill="${mColor}"/><circle cx="15" cy="15" r="6" fill="white"/>`;
 
-                var imageSrc = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`)}`;
-                var markerImage = new kakao.maps.MarkerImage(imageSrc, new kakao.maps.Size(30, 40), {offset: new kakao.maps.Point(15, 40)});
-                var m = new kakao.maps.Marker({ position: new kakao.maps.LatLng(first.lat, first.lng), image: markerImage });
+                // 기존 MarkerImage 대신 HTML DOM 노드(CustomOverlay)를 만들어 마커처럼 활용
+                var markerContent = document.createElement('div');
+                markerContent.style.cssText = "position:relative; display:inline-block; text-align:center; cursor:pointer;";
+                markerContent.innerHTML = `
+                    ${labelHtml}
+                    <img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`)}" 
+                         style="width:30px;height:40px;display:block;" />
+                `;
+
+                // yAnchor: 1 설정으로 라벨 높이와 관계없이 핀 끝이 고정됨
+                var m = new kakao.maps.CustomOverlay({ 
+                    position: new kakao.maps.LatLng(first.lat, first.lng), 
+                    content: markerContent,
+                    yAnchor: 1 
+                });
 
                 var container = document.createElement('div'); container.className = 'iw-container';
-                container.style.cssText = 'padding:15px;background:#fff;border-radius:12px;width:240px;box-shadow:0 4px 15px rgba(0,0,0,0.15);';
+                container.style.cssText = 'padding:15px;background:#fff;border-radius:12px;width:240px;box-shadow:0 4px 15px rgba(0,0,0,0.15); border:1px solid #ddd; position:relative; cursor:default;';
                 
+                // 자체 닫기 버튼
+                var closeBtn = document.createElement('div');
+                closeBtn.innerHTML = '✕';
+                closeBtn.style.cssText = 'position:absolute; top:10px; right:10px; cursor:pointer; font-size:14px; color:#999; z-index:100; padding:5px; font-weight:bold;';
+                container.appendChild(closeBtn);
+
                 var headerIcon = isPole ? '💎' : '💧';
-                var headerText = group.length > 1 ? `<b>${headerIcon} ${first.title}</b> 외 ${group.length-1}건` : `<b>${headerIcon} ${first.title}</b>`;
+                var headerText = group.length > 1 ? `<b style="padding-right:15px;">${headerIcon} ${first.title}</b> 외 ${group.length-1}건` : `<b style="padding-right:15px;">${headerIcon} ${first.title}</b>`;
                 var header = document.createElement('div');
                 header.style.cssText = `border-bottom:2px solid ${mColor};padding-bottom:8px;margin-bottom:5px;color:${mColor};font-size:14px;`;
                 header.innerHTML = headerText;
@@ -665,7 +733,7 @@
                     d.onclick = function() { 
                         if (confirm('삭제하시겠습니까?')) { 
                             currentSites = currentSites.filter(s => s.id !== item.id); 
-                            if (currentInfoWindow) currentInfoWindow.close(); 
+                            if (currentInfoWindow) currentInfoWindow.setMap(null); 
                             saveAndRender(); 
                         } 
                     };
@@ -673,15 +741,35 @@
                 });
                 
                 container.appendChild(listArea);
-                var iw = new kakao.maps.InfoWindow({ content: container, removable: true, zIndex: 99 });
-                kakao.maps.event.addListener(m, 'click', function() { if (currentInfoWindow) currentInfoWindow.close(); iw.open(map, m); currentInfoWindow = iw; });
+
+                // 인포윈도우도 CustomOverlay로 띄워서 정확한 오프셋 및 겹침 제어
+                var iwContent = document.createElement('div');
+                iwContent.style.cssText = 'position:absolute; bottom:45px; left:-120px; z-index:99;'; // 마커 위쪽으로 올라가도록 오프셋 조정
+                iwContent.appendChild(container);
+
+                var iwOverlay = new kakao.maps.CustomOverlay({
+                    content: iwContent,
+                    position: new kakao.maps.LatLng(first.lat, first.lng),
+                    yAnchor: 1, // 마커 바닥을 기준으로 위치
+                    zIndex: 99,
+                    clickable: true // 클릭 가능해야 내용 스크롤/버튼작동 가능
+                });
+
+                closeBtn.onclick = function(e) { e.stopPropagation(); iwOverlay.setMap(null); currentInfoWindow = null; };
+
+                markerContent.onclick = function() { 
+                    if (currentInfoWindow) currentInfoWindow.setMap(null); 
+                    iwOverlay.setMap(map); 
+                    currentInfoWindow = iwOverlay; 
+                };
+                
                 return m;
             });
         }
 
         function drawMarkers() {
             clusterer.clear(); standaloneMarkers.forEach(m => m.setMap(null)); standaloneMarkers = []; 
-            if (currentInfoWindow) currentInfoWindow.close();
+            if (currentInfoWindow) { currentInfoWindow.setMap(null); currentInfoWindow = null; }
             
             var filtered = getFilteredSites(); var markers = buildMarkerObjects(filtered);
             if (isClusteringOn) clusterer.addMarkers(markers); else { markers.forEach(m => m.setMap(map)); standaloneMarkers = markers; }
