@@ -421,7 +421,8 @@
     function getFilteredSites() {
         var results = [];
         currentSites.forEach(function(s) {
-            var colorOk  = activeColorFilters.has(s.colorCode || 1);
+            // 부재 항목은 색상 필터 무시 (isAbsent 최우선)
+            var colorOk  = s.isAbsent || activeColorFilters.has(s.colorCode || 1);
             var absentOk = absentFilter === 'all'
                 || (absentFilter === 'yes' && s.isAbsent)
                 || (absentFilter === 'no'  && !s.isAbsent);
@@ -534,7 +535,13 @@
             var parsed = JSON.parse(saved);
             if (parsed.length > 0 && parsed[0].addrLatLng === undefined && parsed[0].lat !== undefined) {
                 localStorage.removeItem('kesco_map_data'); currentSites = [];
-            } else { currentSites = parsed; }
+            } else {
+                // originalColorCode 잔재 정리 (구버전 데이터 호환)
+                parsed.forEach(s => {
+                    if (s.originalColorCode) { s.colorCode = s.originalColorCode; delete s.originalColorCode; }
+                });
+                currentSites = parsed;
+            }
             drawMarkers();
         }
     });
@@ -843,16 +850,8 @@
                     var realItem = currentSites.find(s => s.id === item.id);
                     if (realItem) {
                         realItem.isAbsent = chk.checked;
-                        if (chk.checked) {
-                            // 원래 색상 저장 후 보라색으로 변경
-                            if (!realItem.originalColorCode) realItem.originalColorCode = realItem.colorCode;
-                            realItem.colorCode = ABSENT_COLOR_CODE;
-                        } else {
-                            // 원래 색상 복원
-                            realItem.colorCode = realItem.originalColorCode || realItem.colorCode;
-                            delete realItem.originalColorCode;
-                        }
-                        saveAndRender(false);
+                        // colorCode는 건드리지 않음 — isAbsent 플래그가 최우선으로 보라색 결정
+                        saveAndRender(true); // 마커 즉시 리드로우
                     }
                 };
                 absLabel.append(chk, ' 미점검 (부재)'); itemDiv.append(absLabel);
