@@ -389,7 +389,25 @@
                 if (currentInfoWindow) { currentInfoWindow.setMap(null); currentInfoWindow = null; } 
             });
             buildColorChips();
-            
+
+            // 탭 비활성화 후 복귀 시 지도 재갱신
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && map) {
+        setTimeout(function() {
+            map.relayout();
+            map.setCenter(map.getCenter());
+        }, 100);
+    }
+});
+
+window.addEventListener('focus', function() {
+    if (map) {
+        setTimeout(function() {
+            map.relayout();
+            map.setCenter(map.getCenter());
+        }, 100);
+    }
+});
             var saved = localStorage.getItem('kesco_map_data');
             if (saved) {
                 var parsed = JSON.parse(saved);
