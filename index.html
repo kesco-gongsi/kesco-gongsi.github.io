@@ -621,8 +621,10 @@ window.addEventListener('focus', function() {
                     watchId = navigator.geolocation.watchPosition(function(pos) {
                         var moveLoc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
                         if (!myLocMarker) {
+                            // 수정
                             var content = document.createElement('div'); content.className = 'my-location-marker';
                             content.innerHTML = '<div id="direction-arrow" class="direction-arrow"></div><div class="location-dot"></div>';
+                            content.style.pointerEvents = 'none';  // ← 추가
                             myLocMarker = new kakao.maps.CustomOverlay({ position: moveLoc, content, xAnchor: 0.5, yAnchor: 0.5, zIndex: 10 }); 
                             myLocMarker.setMap(map); map.setCenter(moveLoc);
                         } else { myLocMarker.setPosition(moveLoc); }
