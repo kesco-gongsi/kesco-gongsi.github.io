@@ -30,7 +30,7 @@
         * { box-sizing: border-box; }
         body { margin: 0; padding: 0; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; background: var(--bg); color: var(--text); }
         
-        /* 💡 높이 오차를 유발하던 100vh 대신 bottom: 0 으로 브라우저 뷰포트에 완벽히 고정 */
+        /* 모바일 브라우저 주소창 오차 방지를 위한 고정 */
         #map { width: 100%; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
 
         /* ── 사이드 패널 ── */
@@ -384,6 +384,7 @@
     var currentInfoWindow = null;
     var myLocMarker = null;
     var isDistrictOn = false;
+    var isAbsoluteOrientation = false;
     var isClusteringOn = true;
     var isLabelOn = true;
     var standaloneMarkers = [];
@@ -821,29 +822,45 @@
         reader.readAsArrayBuffer(file);
     };
 
-    /* ── 방향 감지 ── */
+    /* ── 방향 감지 (화살표 활성화) ── */
     function handleOrientation(event) {
-        var heading = event.webkitCompassHeading || (360 - event.alpha);
-        if (heading != null) { var arr = document.getElementById('direction-arrow'); if (arr) arr.style.transform = 'rotate('+heading+'deg)'; }
+        var heading = null;
+        if(event.webkitCompassHeading !== undefined) heading = event.webkitCompassHeading;
+        else if(event.absolute === true && event.alpha !== null) { isAbsoluteOrientation = true; heading = 360 - event.alpha; }
+        else if(!isAbsoluteOrientation && event.alpha !== null) heading = 360 - event.alpha;
+        
+        if(heading !== null) {
+            var arr = document.getElementById('direction-arrow');
+            if(arr) {
+                // 방향 센서 값이 수신되면 강제로 보여지게 처리
+                arr.style.display = 'block';
+                arr.style.transform = 'rotate(' + heading + 'deg)';
+            }
+        }
     }
 
-    /* ── 실시간 위치 추적 ── */
+    /* ── 실시간 위치 추적 (상단 메뉴 버튼용) ── */
     document.getElementById('track-btn').onclick = function() {
         if (watchId) {
             navigator.geolocation.clearWatch(watchId); watchId = null;
+            window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+            window.removeEventListener('deviceorientation', handleOrientation, true);
+            isAbsoluteOrientation = false;
+            
             if (myLocMarker) { myLocMarker.setMap(null); myLocMarker = null; }
             this.innerText = "📡 위치 표기 시작"; this.className = 'btn btn-outline';
             document.getElementById('my-loc-fab').classList.remove('active');
         } else {
             if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function')
                 DeviceOrientationEvent.requestPermission().then(r => { if (r==='granted') window.addEventListener('deviceorientation',handleOrientation,true); });
-            else window.addEventListener('deviceorientationabsolute',handleOrientation,true);
+            else { window.addEventListener('deviceorientationabsolute',handleOrientation,true); window.addEventListener('deviceorientation',handleOrientation,true); }
+            
             if (navigator.geolocation) {
                 watchId = navigator.geolocation.watchPosition(function(pos) {
                     var loc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
                     if (!myLocMarker) {
                         var c = document.createElement('div'); c.className = 'my-location-marker';
-                        c.innerHTML = '<div id="direction-arrow" class="direction-arrow"></div><div class="location-dot"></div>';
+                        c.innerHTML = '<div id="direction-arrow" class="direction-arrow" style="display:none;"></div><div class="location-dot"></div>';
                         c.style.pointerEvents = 'none';
                         myLocMarker = new kakao.maps.CustomOverlay({ position:loc, content:c, xAnchor:0.5, yAnchor:0.5, zIndex:10 });
                         myLocMarker.setMap(map); map.setCenter(loc);
@@ -855,14 +872,22 @@
         }
     };
 
-    /* ── 내 위치 즉시 이동 (우측 하단 FAB 전용) ── */
+    /* ── 내 위치 즉시 이동 (우측 하단 FAB 전용 - 속도 개선) ── */
     function focusMyLocation() {
         if (!navigator.geolocation) { alert("위치 정보가 지원되지 않는 환경입니다."); return; }
         
+        // 🚀 개선점 1: 이미 위치 추적이 켜져 있다면, 무거운 GPS 검색 없이 바로 마커 위치로 화면만 이동!
+        if (watchId && myLocMarker) {
+            map.setCenter(myLocMarker.getPosition());
+            map.setLevel(4);
+            return;
+        }
+
+        // 🚀 개선점 2: maximumAge(10초 캐시 허용), timeout(5초 타임아웃) 추가로 로딩 딜레이 최소화
         navigator.geolocation.getCurrentPosition(function(pos) {
             var loc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
             map.setCenter(loc);
-            map.setLevel(4); // 카카오맵은 레벨 숫자가 낮을수록 확대됨 (4 정도가 적당)
+            map.setLevel(4);
 
             if(!myLocMarker){
                 var c = document.createElement('div'); c.className = 'my-location-marker';
@@ -879,7 +904,7 @@
             }
         }, function(err) {
             alert("위치 정보를 가져올 수 없습니다. GPS 설정이나 브라우저 권한을 확인해주세요.");
-        }, { enableHighAccuracy: true });
+        }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
     }
 
     /* ── 라벨 생성 ── */
