@@ -276,8 +276,8 @@
 
         <div class="map-type-wrapper">
             <button id="btn-road"     class="m-type-btn active"   onclick="setMapType('roadmap')">일반지도</button>
-            <button id="btn-sky"      class="m-type-btn inactive"  onclick="setMapType('skyview')">위성지도</button>
-            <button id="btn-district" class="m-type-btn inactive"  onclick="toggleDistrict()">지적편집도</button>
+            <button id="btn-sky"      class="m-type-btn inactive" onclick="setMapType('skyview')">위성지도</button>
+            <button id="btn-district" class="m-type-btn inactive" onclick="toggleDistrict()">지적편집도</button>
         </div>
 
         <h3>📍 공시맵 <span class="badge">3.0</span></h3>
@@ -383,27 +383,94 @@
     var failedList = [];
     var currentInfoWindow = null;
     var myLocMarker = null;
+    
+    // 상태 변수들
     var isDistrictOn = false;
+    var currentMapTypeId = 'roadmap';
     var isAbsoluteOrientation = false;
     var isClusteringOn = true;
     var isLabelOn = true;
     var standaloneMarkers = [];
-
     var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]);
     var absentFilter = 'all';
     var searchTypeFilter = 'mixed';
     var quickSearchKeyword = "";
-    
-    var pendingMarkerCoord = null; // 모달창 대기용 좌표
+    var pendingMarkerCoord = null;
 
     var colorMap = {
         1:"#0055AA", 2:"#EF4444", 3:"#22C55E", 4:"#F97316",
         5:"#A855F7", 6:"#EC4899", 7:"#EAB308", 8:"#06B6D4",
         9:"#78350F", 10:"#1F2937"
     };
-    var ABSENT_COLOR_CODE = 5; // 보라색
+    var ABSENT_COLOR_CODE = 5;
 
-    /* ── 색상 칩 생성 (카카오 로딩 전에 즉시 실행) ── */
+    /* ── 설정 저장 및 불러오기 ── */
+    function saveSettings() {
+        var settings = {
+            isClusteringOn: isClusteringOn,
+            isLabelOn: isLabelOn,
+            isDistrictOn: isDistrictOn,
+            mapTypeId: currentMapTypeId,
+            absentFilter: absentFilter,
+            searchTypeFilter: searchTypeFilter,
+            activeColorFilters: Array.from(activeColorFilters)
+        };
+        localStorage.setItem('kesco_settings', JSON.stringify(settings));
+    }
+
+    function loadAndApplySettings() {
+        var saved = localStorage.getItem('kesco_settings');
+        if (!saved) return;
+
+        var settings = JSON.parse(saved);
+        
+        if (settings.isClusteringOn !== undefined) isClusteringOn = settings.isClusteringOn;
+        if (settings.isLabelOn !== undefined) isLabelOn = settings.isLabelOn;
+        if (settings.isDistrictOn !== undefined) isDistrictOn = settings.isDistrictOn;
+        if (settings.mapTypeId) currentMapTypeId = settings.mapTypeId;
+        if (settings.absentFilter) absentFilter = settings.absentFilter;
+        if (settings.searchTypeFilter) searchTypeFilter = settings.searchTypeFilter;
+        if (settings.activeColorFilters) activeColorFilters = new Set(settings.activeColorFilters);
+
+        // UI 텍스트/스타일 복구
+        var labelBtn = document.getElementById('label-btn');
+        labelBtn.innerText = isLabelOn ? '🏷️ 주소 라벨 ON' : '🏷️ 주소 라벨 OFF';
+        labelBtn.classList.toggle('off', !isLabelOn);
+
+        var clusterBtn = document.getElementById('cluster-btn');
+        clusterBtn.innerText = isClusteringOn ? '🔵 클러스터링 ON' : '⚪ 클러스터링 OFF';
+        clusterBtn.classList.toggle('off', !isClusteringOn);
+
+        ['all','yes','no'].forEach(function(v) {
+            document.getElementById('filter-absent-' + v).className = 'pill' + (v === absentFilter ? (absentFilter === 'yes' ? ' on-absent' : ' on') : '');
+        });
+
+        ['mixed','address','pole'].forEach(function(v) {
+            document.getElementById('filter-type-' + v).classList.toggle('on', v === searchTypeFilter);
+        });
+
+        document.querySelectorAll('#color-filter-chips .color-chip').forEach(function(chip) {
+            var code = parseInt(chip.dataset.code);
+            if (activeColorFilters.has(code)) chip.classList.add('on');
+            else chip.classList.remove('on');
+        });
+
+        // 지도 뷰/지적도 상태 복구
+        var r = document.getElementById('btn-road'), s = document.getElementById('btn-sky'), d = document.getElementById('btn-district');
+        if (currentMapTypeId === 'roadmap') {
+            map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+            r.className = 'm-type-btn active'; s.className = 'm-type-btn inactive';
+        } else {
+            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+            s.className = 'm-type-btn active'; r.className = 'm-type-btn inactive';
+        }
+        if (isDistrictOn) {
+            map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+            d.className = 'm-type-btn active';
+        }
+    }
+
+    /* ── 색상 칩 생성 ── */
     function buildColorChips() {
         var wrap = document.getElementById('color-filter-chips');
         if (!wrap) return;
@@ -422,9 +489,11 @@
     }
     buildColorChips();
 
+    /* ── 필터 토글 동작 (설정 저장 추가) ── */
     function toggleColorFilter(code, el) {
         if (activeColorFilters.has(code)) { activeColorFilters.delete(code); el.classList.remove('on'); }
         else { activeColorFilters.add(code); el.classList.add('on'); }
+        saveSettings();
         drawMarkers();
     }
 
@@ -436,6 +505,7 @@
             for (var i = 1; i <= 10; i++) activeColorFilters.add(i);
             document.querySelectorAll('#color-filter-chips .color-chip').forEach(el => el.classList.add('on'));
         }
+        saveSettings();
         drawMarkers();
     }
 
@@ -445,6 +515,7 @@
             var el = document.getElementById('filter-absent-' + v);
             el.className = 'pill' + (v === val ? (val === 'yes' ? ' on-absent' : ' on') : '');
         });
+        saveSettings();
         drawMarkers();
     }
 
@@ -453,6 +524,7 @@
         ['mixed','address','pole'].forEach(function(v) {
             document.getElementById('filter-type-' + v).classList.toggle('on', v === val);
         });
+        saveSettings();
         drawMarkers();
     }
 
@@ -461,11 +533,11 @@
         drawMarkers();
     }
 
-    /* ── 토글 ── */
     document.getElementById('label-btn').onclick = function() {
         isLabelOn = !isLabelOn;
         this.innerText = isLabelOn ? '🏷️ 주소 라벨 ON' : '🏷️ 주소 라벨 OFF';
         this.classList.toggle('off', !isLabelOn);
+        saveSettings();
         drawMarkers();
     };
 
@@ -473,10 +545,37 @@
         isClusteringOn = !isClusteringOn;
         this.innerText = isClusteringOn ? '🔵 클러스터링 ON' : '⚪ 클러스터링 OFF';
         this.classList.toggle('off', !isClusteringOn);
+        saveSettings();
         drawMarkers();
     };
 
-    /* ── 필터링된 사이트 ── */
+    /* ── 지도 타입 토글 (설정 저장 추가) ── */
+    function setMapType(type) {
+        currentMapTypeId = type;
+        var r = document.getElementById('btn-road'), s = document.getElementById('btn-sky');
+        if (type === 'roadmap') {
+            map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+            r.className = 'm-type-btn active'; s.className = 'm-type-btn inactive';
+        } else {
+            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+            s.className = 'm-type-btn active'; r.className = 'm-type-btn inactive';
+        }
+        saveSettings();
+    }
+
+    function toggleDistrict() {
+        var btn = document.getElementById('btn-district');
+        if (isDistrictOn) {
+            map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+            btn.className = 'm-type-btn inactive'; isDistrictOn = false;
+        } else {
+            map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+            btn.className = 'm-type-btn active'; isDistrictOn = true;
+        }
+        saveSettings();
+    }
+
+    /* ── 필터링 ── */
     function getFilteredSites() {
         var results = [];
         currentSites.forEach(function(s) {
@@ -542,29 +641,6 @@
         ).join('');
     }
 
-    /* ── 지도 타입 ── */
-    function setMapType(type) {
-        var r = document.getElementById('btn-road'), s = document.getElementById('btn-sky');
-        if (type === 'roadmap') {
-            map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
-            r.className = 'm-type-btn active'; s.className = 'm-type-btn inactive';
-        } else {
-            map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
-            s.className = 'm-type-btn active'; r.className = 'm-type-btn inactive';
-        }
-    }
-
-    function toggleDistrict() {
-        var btn = document.getElementById('btn-district');
-        if (isDistrictOn) {
-            map.removeOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
-            btn.className = 'm-type-btn inactive'; isDistrictOn = false;
-        } else {
-            map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
-            btn.className = 'm-type-btn active'; isDistrictOn = true;
-        }
-    }
-
     /* ── 카카오 초기화 ── */
     kakao.maps.load(function() {
         map = new kakao.maps.Map(document.getElementById('map'), {
@@ -576,16 +652,18 @@
         });
         geocoder = new kakao.maps.services.Geocoder();
 
-        // 우클릭 마커 생성 (데스크탑 용)
+        // [핵심 변경점] 맵 초기화 직후 저장된 설정을 바로 불러옵니다.
+        loadAndApplySettings();
+
+        // 이벤트 리스너들
         kakao.maps.event.addListener(map, 'rightclick', function(e) { addManualMarker(e.latLng); });
         kakao.maps.event.addListener(map, 'click', function() {
             if (currentInfoWindow) { currentInfoWindow.setMap(null); currentInfoWindow = null; }
         });
 
-        /* 🚀 롱프레스 (모바일용) - 정확한 맵 매핑을 위한 좌표 변환 수정 */
+        // 롱프레스 모바일
         var mapDiv = document.getElementById('map'), rippleEl = document.getElementById('longpress-ripple');
         var lpTimer = null, lpMoved = false, lpStartX, lpStartY;
-        
         function showRipple(x,y){ rippleEl.style.left=x+'px'; rippleEl.style.top=y+'px'; rippleEl.classList.add('active'); }
         function hideRipple(){ rippleEl.classList.remove('active'); }
 
@@ -598,13 +676,10 @@
             
             lpTimer = setTimeout(function(){
                 if(lpMoved) return;
-                
-                // CSS 보정(bottom:0) 및 GetBoundingClientRect 조합으로 오차 제거
                 var proj = map.getProjection();
                 var rect = mapDiv.getBoundingClientRect();
                 var point = new kakao.maps.Point(lpStartX - rect.left, lpStartY - rect.top);
                 var coord = proj.coordsFromContainerPoint(point);
-                
                 if(navigator.vibrate) navigator.vibrate(50);
                 hideRipple(); 
                 addManualMarker(coord);
@@ -621,13 +696,7 @@
         mapDiv.addEventListener('touchend',  function(){clearTimeout(lpTimer);hideRipple();},{passive:true});
         mapDiv.addEventListener('touchcancel',function(){clearTimeout(lpTimer);hideRipple();lpMoved=true;},{passive:true});
 
-        document.addEventListener('visibilitychange', function() {
-            if (document.visibilityState === 'visible' && map) setTimeout(() => { map.relayout(); map.setCenter(map.getCenter()); }, 100);
-        });
-        window.addEventListener('focus', function() {
-            if (map) setTimeout(() => { map.relayout(); map.setCenter(map.getCenter()); }, 100);
-        });
-
+        // 데이터 복구 및 렌더링
         var saved = localStorage.getItem('kesco_map_data');
         if (saved) {
             var parsed = JSON.parse(saved);
@@ -643,14 +712,13 @@
         }
     });
 
-    /* ── 거리 계산 ── */
+    /* ── 기타 유틸 함수들 ── */
     function getDistance(lat1, lon1, lat2, lon2) {
         const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
         const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
-    /* ── 수동 마커 추가 모달 동작 ── */
     function addManualMarker(latLng) {
         pendingMarkerCoord = latLng;
         document.getElementById('modal-input-title').value = '';
@@ -667,12 +735,7 @@
     function confirmMarkerModal() {
         var title = document.getElementById('modal-input-title').value.trim();
         var memo = document.getElementById('modal-input-memo').value.trim();
-
-        if(!title) {
-            alert("상호를 입력해주세요.");
-            document.getElementById('modal-input-title').focus();
-            return;
-        }
+        if(!title) { alert("상호를 입력해주세요."); document.getElementById('modal-input-title').focus(); return; }
 
         document.getElementById('custom-modal').style.display = 'none';
         var latLng = pendingMarkerCoord;
@@ -691,7 +754,6 @@
         });
     }
 
-    /* ── 인입주 단일 조회 ── */
     async function searchPole() {
         var poleNum = document.getElementById('pole-input').value.toUpperCase().trim();
         if (poleNum.length !== 8) { alert("인입주번호 8자리를 입력해주세요."); return; }
@@ -728,7 +790,7 @@
                     isAbsent:false, memo:"인입주 단일 검색 추가"
                 });
             });
-            toggleSearchTypeFilter('mixed');
+            toggleSearchTypeFilter('mixed'); // 이 함수 안에서 자동으로 saveSettings()가 호출됩니다.
             saveAndRender();
             map.setCenter(new kakao.maps.LatLng(found[0].lat, found[0].lng));
             map.setLevel(2);
@@ -736,7 +798,6 @@
         } catch(e) { alert(`조회 에러: ${e.message}`); st.innerText = "오류 발생"; }
     }
 
-    /* ── 엑셀 업로드 ── */
     document.getElementById('upload-btn').onclick = async function() {
         var file = document.getElementById('excel-file').files[0];
         if (!file) return alert("파일을 선택해주세요.");
@@ -822,7 +883,6 @@
         reader.readAsArrayBuffer(file);
     };
 
-    /* ── 방향 감지 (화살표 활성화) ── */
     function handleOrientation(event) {
         var heading = null;
         if(event.webkitCompassHeading !== undefined) heading = event.webkitCompassHeading;
@@ -831,15 +891,10 @@
         
         if(heading !== null) {
             var arr = document.getElementById('direction-arrow');
-            if(arr) {
-                // 방향 센서 값이 수신되면 강제로 보여지게 처리
-                arr.style.display = 'block';
-                arr.style.transform = 'rotate(' + heading + 'deg)';
-            }
+            if(arr) { arr.style.display = 'block'; arr.style.transform = 'rotate(' + heading + 'deg)'; }
         }
     }
 
-    /* ── 실시간 위치 추적 (상단 메뉴 버튼용) ── */
     document.getElementById('track-btn').onclick = function() {
         if (watchId) {
             navigator.geolocation.clearWatch(watchId); watchId = null;
@@ -872,18 +927,14 @@
         }
     };
 
-    /* ── 내 위치 즉시 이동 (우측 하단 FAB 전용 - 속도 개선) ── */
     function focusMyLocation() {
         if (!navigator.geolocation) { alert("위치 정보가 지원되지 않는 환경입니다."); return; }
-        
-        // 🚀 개선점 1: 이미 위치 추적이 켜져 있다면, 무거운 GPS 검색 없이 바로 마커 위치로 화면만 이동!
         if (watchId && myLocMarker) {
             map.setCenter(myLocMarker.getPosition());
             map.setLevel(4);
             return;
         }
 
-        // 🚀 개선점 2: maximumAge(10초 캐시 허용), timeout(5초 타임아웃) 추가로 로딩 딜레이 최소화
         navigator.geolocation.getCurrentPosition(function(pos) {
             var loc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
             map.setCenter(loc);
@@ -899,15 +950,12 @@
                 myLocMarker.setPosition(loc);
             }
             
-            if(!watchId) {
-                document.getElementById('track-btn').click();
-            }
+            if(!watchId) { document.getElementById('track-btn').click(); }
         }, function(err) {
             alert("위치 정보를 가져올 수 없습니다. GPS 설정이나 브라우저 권한을 확인해주세요.");
         }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
     }
 
-    /* ── 라벨 생성 ── */
     function buildLabelHtml(labelText, color) {
         if (!isLabelOn || !labelText) return '';
         var cleaned = labelText.replace(/(\s+[a-zA-Z]+)+$/g, '').trim();
@@ -916,7 +964,6 @@
         return `<div class="marker-label" style="border-top:2px solid ${color};">${short}</div>`;
     }
 
-    /* ── 마커 생성 ── */
     function buildMarkerObjects(sites) {
         var groups = {};
         sites.forEach(function(s) {
@@ -946,13 +993,11 @@
                      style="width:30px;height:40px;display:block;" />
             `;
 
-            /* 인포윈도우 */
             var container = document.createElement('div');
             container.className = 'iw-container';
             container.style.cssText = 'padding:15px;background:#fff;border-radius:14px;width:250px;box-shadow:0 6px 24px rgba(0,0,0,0.15);border:1px solid #E2E8F0;position:relative;cursor:default;';
 
-            var closeBtn = document.createElement('div');
-            closeBtn.innerHTML = '✕';
+            var closeBtn = document.createElement('div'); closeBtn.innerHTML = '✕';
             closeBtn.style.cssText = 'position:absolute;top:10px;right:10px;cursor:pointer;font-size:14px;color:#94A3B8;z-index:100;padding:4px;font-weight:bold;';
             container.appendChild(closeBtn);
 
@@ -964,8 +1009,7 @@
             container.appendChild(header);
 
             if (group.length > 1) {
-                var bulkDelBtn = document.createElement('button');
-                bulkDelBtn.className = 'bulk-del-btn';
+                var bulkDelBtn = document.createElement('button'); bulkDelBtn.className = 'bulk-del-btn';
                 bulkDelBtn.innerText = `🗑️ 이 위치 ${group.length}건 전체 삭제`;
                 bulkDelBtn.onclick = function() {
                     if (confirm(`이 위치에 겹쳐진 ${group.length}건을 모두 삭제하시겠습니까?`)) {
@@ -1014,10 +1058,7 @@
                 var chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = item.isAbsent;
                 chk.onchange = function() {
                     var realItem = currentSites.find(s => s.id === item.id);
-                    if (realItem) {
-                        realItem.isAbsent = chk.checked;
-                        saveAndRender(true);
-                    }
+                    if (realItem) { realItem.isAbsent = chk.checked; saveAndRender(true); }
                 };
                 absLabel.append(chk, ' 미점검 (부재)'); itemDiv.append(absLabel);
 
@@ -1040,8 +1081,7 @@
 
             container.appendChild(listArea);
 
-            var iwContent = document.createElement('div');
-            iwContent.style.cssText = 'position:absolute;bottom:45px;left:-125px;z-index:99;';
+            var iwContent = document.createElement('div'); iwContent.style.cssText = 'position:absolute;bottom:45px;left:-125px;z-index:99;';
             iwContent.appendChild(container);
 
             var iwOverlay = new kakao.maps.CustomOverlay({
@@ -1056,14 +1096,11 @@
             };
 
             return new kakao.maps.CustomOverlay({
-                position: new kakao.maps.LatLng(first.lat, first.lng),
-                content: markerContent, yAnchor: 1,
-                _iwOverlay: iwOverlay
+                position: new kakao.maps.LatLng(first.lat, first.lng), content: markerContent, yAnchor: 1, _iwOverlay: iwOverlay
             });
         });
     }
 
-    /* ── 마커 렌더링 ── */
     function drawMarkers() {
         clusterer.clear();
         standaloneMarkers.forEach(m => m.setMap(null));
@@ -1088,7 +1125,11 @@
     }
 
     document.getElementById('clear-btn').onclick = function() {
-        if (confirm("모든 데이터를 삭제하시겠습니까?")) { localStorage.removeItem('kesco_map_data'); location.reload(); }
+        if (confirm("모든 데이터를 삭제하시겠습니까?")) { 
+            localStorage.removeItem('kesco_map_data');
+            localStorage.removeItem('kesco_settings'); // 설정값도 함께 초기화
+            location.reload(); 
+        }
     };
 </script>
 </body>
