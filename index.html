@@ -4,11 +4,21 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="color-scheme" content="light only">
-    <title>공시맵 3.0</title>
-    
+    <title>공시맵 3.1</title>
+
+    <!-- ───────────────────────────────────────────────
+         외부 라이브러리 로드
+         - XLSX: 엑셀 파일 파싱용
+         - Kakao Maps SDK: services(주소검색) + clusterer(군집화) 사용
+         autoload=false → kakao.maps.load() 콜백 안에서 직접 초기화
+    ─────────────────────────────────────────────── -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=85ad2817ce8a886974a3fce65f856ab4&libraries=services,clusterer&autoload=false"></script>
+
     <style>
+        /* ───── 전역 디자인 토큰 (CSS 변수) ─────
+           색상/모서리/그림자를 한 곳에서 관리해서
+           전체 톤 변경이 쉽도록 구성 */
         :root {
             color-scheme: light;
             --primary: #0055AA;
@@ -29,11 +39,13 @@
         }
         * { box-sizing: border-box; }
         body { margin: 0; padding: 0; font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif; overflow: hidden; background: var(--bg); color: var(--text); }
-        
-        /* 모바일 브라우저 주소창 오차 방지를 위한 고정 */
+
+        /* 모바일 브라우저 주소창 동적 변동 대응:
+           top/bottom 모두 0으로 고정해서 height 변화에 흔들리지 않게 함 */
         #map { width: 100%; position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
 
-        /* ── 사이드 패널 ── */
+        /* ───── 사이드 메뉴 패널 ─────
+           우측 상단에 floating 형태로 배치, 접기 가능 */
         #upload-box {
             position: absolute; top: 12px; left: 12px; z-index: 1001;
             background: var(--surface);
@@ -42,9 +54,10 @@
             box-shadow: var(--shadow);
             border: 1px solid var(--border);
             transition: all 0.25s ease;
-            max-height: calc(100dvh - 24px);
+            max-height: calc(100dvh - 24px); /* dvh: 모바일 주소창 변동 대응 */
             display: flex; flex-direction: column;
         }
+        /* 접힌 상태: 토글 버튼만 보이도록 축소 */
         #upload-box.collapsed {
             width: 110px; padding: 0; height: 40px;
             border: none; background: transparent; box-shadow: none; display: block;
@@ -53,7 +66,8 @@
         #upload-box.collapsed #menu-content,
         #upload-box.collapsed .map-type-wrapper { display: none; }
 
-        /* ── 공통 버튼 ── */
+        /* ───── 공통 버튼 스타일 ─────
+           .btn 베이스 + 컬러 modifier 조합 */
         .btn {
             width: 100%; padding: 10px 14px;
             border: none; border-radius: var(--radius);
@@ -62,7 +76,7 @@
             transition: filter 0.15s, transform 0.1s;
             line-height: 1.3;
         }
-        .btn:active { transform: scale(0.98); }
+        .btn:active { transform: scale(0.98); } /* 터치 피드백 */
         .btn:hover { filter: brightness(0.95); }
 
         .btn-primary   { background: var(--primary); color: #fff; }
@@ -80,7 +94,7 @@
             border-radius: var(--radius); font-weight: 700; width: 100%;
         }
 
-        /* ── 지도 타입 ── */
+        /* ───── 지도 타입 전환 (일반/위성/지적편집도) ───── */
         .map-type-wrapper { display: flex; gap: 5px; margin: 12px 0 4px; flex-shrink: 0; }
         .m-type-btn {
             flex: 1; padding: 7px 4px; font-size: 11.5px; font-weight: 700;
@@ -90,7 +104,7 @@
         .m-type-btn.active  { background: var(--primary); color: #fff; }
         .m-type-btn.inactive{ background: #fff; color: var(--primary); }
 
-        /* ── 제목 ── */
+        /* ───── 패널 제목 영역 ───── */
         h3 {
             flex-shrink: 0; margin: 8px 0 12px; font-size: 16px;
             color: var(--primary); display: flex; align-items: center; gap: 6px;
@@ -101,7 +115,8 @@
             padding: 2px 6px; border-radius: 99px; letter-spacing: 0;
         }
 
-        /* ── 스크롤 영역 ── */
+        /* ───── 메뉴 본문 (스크롤 영역) ─────
+           패널 높이를 넘어가면 자체 스크롤 */
         #menu-content {
             flex-grow: 1; min-height: 0;
             overflow-y: auto;
@@ -110,7 +125,7 @@
         #menu-content::-webkit-scrollbar { width: 3px; }
         #menu-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-        /* ── 검색 그리드 ── */
+        /* ───── 검색 영역 (인입주 / 빠른검색 2열 그리드) ───── */
         .search-grid {
             display: grid; grid-template-columns: 1fr 1fr;
             gap: 8px; margin-bottom: 14px;
@@ -130,7 +145,7 @@
 
         .divider { border: 0; border-top: 1px solid var(--border); margin: 13px 0; }
 
-        /* ── 필터 섹션 ── */
+        /* ───── 필터 칩(색상/부재/조회방식) ───── */
         .filter-section { margin-bottom: 12px; }
         .filter-label {
             font-size: 11px; font-weight: 700; color: var(--text-muted);
@@ -142,7 +157,7 @@
         .color-chip {
             padding: 4px 10px; border-radius: 99px; font-size: 11px;
             font-weight: 700; cursor: pointer; border: 2px solid transparent;
-            opacity: 0.35; transition: opacity 0.15s;
+            opacity: 0.35; transition: opacity 0.15s; /* off일 때 흐리게 */
         }
         .color-chip.on { opacity: 1; border-color: rgba(0,0,0,0.2); }
 
@@ -165,14 +180,15 @@
         }
         .type-chip.on { background: var(--primary-light); border-color: var(--primary); }
 
-        /* ── 파일 입력 ── */
+        /* ───── 파일 업로드 영역 ───── */
         .file-section { margin-bottom: 10px; }
         .file-section input[type=file] { font-size: 11.5px; width: 100%; margin-bottom: 4px; }
         .file-hint { font-size: 10px; color: var(--text-muted); margin-bottom: 10px; line-height: 1.5; }
 
-        /* ── 버튼 스택 ── */
+        /* 액션 버튼 세로 스택 */
         .btn-stack { display: flex; flex-direction: column; gap: 6px; }
 
+        /* 상태 표시 영역 (X건 표출 등) */
         #status {
             margin-top: 10px; font-size: 11.5px; color: var(--text-muted);
             text-align: center; font-weight: 600;
@@ -180,7 +196,7 @@
             border: 1px solid var(--border);
         }
 
-        /* ── 실패 목록 ── */
+        /* ───── 누락/실패 목록 ───── */
         #failed-section { display: none; margin-top: 12px; }
         #failed-list-content {
             display: none; max-height: 200px; overflow-y: auto;
@@ -191,7 +207,7 @@
         .failed-item { border-bottom: 1px solid var(--border); padding: 6px 0; }
         .failed-item:last-child { border-bottom: none; }
 
-        /* ── 인포윈도우 ── */
+        /* ───── 인포윈도우(마커 클릭 시 팝업) ───── */
         .iw-container { background: #fff; color: var(--text); }
         .iw-item { border-bottom: 1px solid var(--border); padding: 12px 0; }
         .iw-item:last-child { border-bottom: none; }
@@ -209,24 +225,28 @@
         .del-btn-iw { display: block; margin-top: 5px; background: var(--danger-light); color: var(--danger); text-align: center; padding: 7px; border-radius: 6px; font-size: 11px; font-weight: 700; border: none; width: 100%; cursor: pointer; }
         .bulk-del-btn { display: block; margin-bottom: 10px; background: #7C3AED22; color: #7C3AED; text-align: center; padding: 9px; border-radius: 6px; font-size: 12px; font-weight: 700; border: 1.5px dashed #7C3AED; width: 100%; cursor: pointer; }
 
-        /* ── 내 위치 ── */
+        /* ───── 내 위치 마커(원 + 방향 화살표) ─────
+           컨테이너 50×50 / 도트 20×20 / 화살표 위쪽 배치
+           pointer-events: none → 지도 클릭 막지 않음 */
         .my-location-marker { position: relative; width: 50px; height: 50px; pointer-events: none; }
         .direction-arrow { position: absolute; top: 0; left: 15px; width: 20px; height: 25px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23EF4444'%3E%3Cpath d='M12 2L22 20L12 17L2 20L12 2Z'/%3E%3C/svg%3E"); background-size: contain; background-repeat: no-repeat; transform-origin: center bottom; z-index: 2; transition: transform 0.1s; }
         .location-dot { position: absolute; top: 15px; left: 15px; width: 20px; height: 20px; background: var(--primary); border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 3; }
 
-        /* ── 마커 라벨 ── */
+        /* ───── 마커 위 라벨 (상호명 표시) ─────
+           마커 위쪽에 띄우는 작은 텍스트 박스
+           70% 축소 적용 → top:-3px, font-size 9.5px로 조정 */
         .marker-label {
-            position: absolute; left: 50%; top: -4px;
+            position: absolute; left: 50%; top: -3px;
             transform: translate(-50%, -100%);
             background: rgba(255,255,255,0.93);
-            color: var(--text); font-size: 10.5px; font-weight: 700;
-            padding: 3px 7px; border-radius: 4px; white-space: nowrap;
-            max-width: 160px; overflow: hidden; text-overflow: ellipsis;
+            color: var(--text); font-size: 9.5px; font-weight: 700;
+            padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+            max-width: 130px; overflow: hidden; text-overflow: ellipsis;
             box-shadow: 0 1px 5px rgba(0,0,0,0.18); pointer-events: none;
             border: 1px solid rgba(0,0,0,0.08); line-height: 1.4;
         }
 
-        /* ── 커스텀 모달 CSS ── */
+        /* ───── 수동 마커 추가 모달 ───── */
         #custom-modal {
             display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0,0,0,0.4); z-index: 2000; align-items: center; justify-content: center;
@@ -248,7 +268,7 @@
         .m-btn-cancel { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); }
         .m-btn-save { background: var(--primary); color: #fff; }
 
-        /* ── 내 위치 버튼(FAB) ── */
+        /* ───── 내 위치 FAB (우하단 플로팅 버튼) ───── */
         #my-loc-fab {
             position: fixed; bottom: 30px; right: 20px; z-index: 1000;
             width: 48px; height: 48px; background: #fff; border-radius: 50%;
@@ -260,30 +280,34 @@
         #my-loc-fab svg { width: 24px; height: 24px; fill: var(--text); transition: fill 0.2s; }
         #my-loc-fab.active svg { fill: var(--primary); }
 
-        /* ── 롱프레스 효과 ── */
-        #longpress-ripple { 
-            position: absolute; width: 60px; height: 60px; border-radius: 50%; 
-            background: rgba(0,85,170,0.2); border: 2px solid rgba(0,85,170,0.45); 
-            transform: translate(-50%,-50%) scale(0); pointer-events: none; 
-            z-index: 1000; transition: transform 0.6s ease-out, opacity 0.6s ease-out; opacity: 0; 
+        /* ───── 롱프레스 리플 효과 (모바일 길게누르기 시각 피드백) ───── */
+        #longpress-ripple {
+            position: absolute; width: 60px; height: 60px; border-radius: 50%;
+            background: rgba(0,85,170,0.2); border: 2px solid rgba(0,85,170,0.45);
+            transform: translate(-50%,-50%) scale(0); pointer-events: none;
+            z-index: 1000; transition: transform 0.6s ease-out, opacity 0.6s ease-out; opacity: 0;
         }
         #longpress-ripple.active { transform: translate(-50%,-50%) scale(1); opacity: 1; }
     </style>
 </head>
 <body>
+    <!-- ═════════════════════════════════════════════
+         좌상단 메뉴 패널
+    ═════════════════════════════════════════════ -->
     <div id="upload-box">
         <button id="toggle-btn" onclick="toggleMenu()">접기 ▲</button>
 
+        <!-- 지도 타입 전환 버튼 그룹 -->
         <div class="map-type-wrapper">
             <button id="btn-road"     class="m-type-btn active"   onclick="setMapType('roadmap')">일반지도</button>
             <button id="btn-sky"      class="m-type-btn inactive" onclick="setMapType('skyview')">위성지도</button>
             <button id="btn-district" class="m-type-btn inactive" onclick="toggleDistrict()">지적편집도</button>
         </div>
 
-        <h3>📍 공시맵 <span class="badge">3.0</span></h3>
+        <h3>📍 공시맵 <span class="badge">3.1</span></h3>
 
         <div id="menu-content">
-
+            <!-- 검색 그리드: 인입주 단일조회 / 빠른 키워드 필터 -->
             <div class="search-grid">
                 <div class="search-cell">
                     <label>⚡ 인입주 찾기</label>
@@ -301,15 +325,17 @@
 
             <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px;">🗂 마커 표시 설정</div>
 
+            <!-- 조회 방식 필터 (혼합/주소만/인입주만) -->
             <div class="filter-section">
                 <div class="filter-label">조회 방식 (아이콘 구분)</div>
                 <div class="chip-row">
                     <div class="type-chip on" id="filter-type-mixed"   onclick="toggleSearchTypeFilter('mixed')">혼합<br><span style="font-size:9px;font-weight:400;">(주소→인입주)</span></div>
-                    <div class="type-chip"    id="filter-type-address" onclick="toggleSearchTypeFilter('address')">💧 주소만</div>
+                    <div class="type-chip"    id="filter-type-address" onclick="toggleSearchTypeFilter('address')">⭐ 주소만</div>
                     <div class="type-chip"    id="filter-type-pole"    onclick="toggleSearchTypeFilter('pole')">💎 인입주만</div>
                 </div>
             </div>
 
+            <!-- 색상 필터 (1~10) -->
             <div class="filter-section">
                 <div class="filter-label">
                     <span>색상 코드</span>
@@ -318,22 +344,25 @@
                 <div class="chip-row" id="color-filter-chips"></div>
             </div>
 
+            <!-- 부재 여부 필터 -->
             <div class="filter-section">
                 <div class="filter-label">부재 여부</div>
                 <div class="chip-row">
-                    <div class="pill on"        id="filter-absent-all" onclick="toggleAbsentFilter('all')">전체</div>
-                    <div class="pill"            id="filter-absent-yes" onclick="toggleAbsentFilter('yes')">부재만</div>
-                    <div class="pill"            id="filter-absent-no"  onclick="toggleAbsentFilter('no')">점검가능만</div>
+                    <div class="pill on"  id="filter-absent-all" onclick="toggleAbsentFilter('all')">전체</div>
+                    <div class="pill"     id="filter-absent-yes" onclick="toggleAbsentFilter('yes')">부재만</div>
+                    <div class="pill"     id="filter-absent-no"  onclick="toggleAbsentFilter('no')">점검가능만</div>
                 </div>
             </div>
 
             <hr class="divider">
 
+            <!-- 엑셀 업로드 -->
             <div class="file-section">
                 <input type="file" id="excel-file" accept=".xlsx,.xls">
                 <div class="file-hint">형식: A열 상호 / B열 주소 / C열 색상코드 / <b style="color:var(--primary)">D열 인입주번호</b></div>
             </div>
 
+            <!-- 액션 버튼 스택 -->
             <div class="btn-stack">
                 <button id="upload-btn"  class="btn btn-primary">📍 엑셀 데이터 표출</button>
                 <button id="track-btn"   class="btn btn-outline">📡 위치 표기 시작</button>
@@ -344,22 +373,28 @@
 
             <div id="status">지도 우클릭(길게 누르기)하여 핀 추가</div>
 
+            <!-- 주소 변환 실패 목록 -->
             <div id="failed-section">
                 <button class="btn btn-danger" style="margin-top:10px;" onclick="toggleFailedList()">
                     ❌ 누락/실패: <span id="fail-count">0</span>건 확인
                 </button>
                 <div id="failed-list-content"></div>
             </div>
+        </div>
+    </div>
 
-        </div></div><div id="my-loc-fab" onclick="focusMyLocation()">
+    <!-- 우하단 내 위치 FAB -->
+    <div id="my-loc-fab" onclick="focusMyLocation()">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3c-.46-4.17-3.77-7.48-7.94-7.94V1h-2v2.06C6.83 3.52 3.52 6.83 3.06 11H1v2h2.06c.46 4.17 3.77 7.48 7.94 7.94V23h2v-2.06c4.17-.46 7.48-3.77 7.94-7.94H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
         </svg>
     </div>
 
+    <!-- 롱프레스 리플(애니메이션 원) + 지도 컨테이너 -->
     <div id="longpress-ripple"></div>
     <div id="map"></div>
 
+    <!-- 수동 마커 추가 모달 -->
     <div id="custom-modal">
         <div class="modal-box">
             <h4>📍 마커 직접 추가</h4>
@@ -373,46 +408,65 @@
     </div>
 
 <script>
+    /* ═══════════════════════════════════════════════════════════
+       [상수] 인입주 좌표 데이터가 저장된 GitHub 리포지토리
+       └ 4자리 prefix별로 CSV 분리 저장됨 (예: 1234.csv)
+       └ raw.githubusercontent.com 직접 fetch
+    ═══════════════════════════════════════════════════════════ */
     const GITHUB_USER   = "kesco-gongsi";
     const GITHUB_REPO   = "ndis-data1";
     const GITHUB_BRANCH = "main";
 
+    /* ═══════════════════════════════════════════════════════════
+       [마커 크기 상수] 70% 축소 적용
+       └ 기존 30×40 → 21×28
+       └ 별 모양 viewBox 좌표는 24×24 기준으로 정규화
+    ═══════════════════════════════════════════════════════════ */
+    const MARKER_W = 21;  // 마커 너비(px)
+    const MARKER_H = 28;  // 마커 높이(px)
+
+    /* ═══════════════════════════════════════════════════════════
+       [전역 상태 변수]
+       - map/clusterer/geocoder: Kakao 객체
+       - currentSites: 현재 표시 중인 모든 데이터 원본
+       - watchId: geolocation watchPosition ID (해제용)
+       - currentInfoWindow: 동시에 1개만 열리도록 추적
+    ═══════════════════════════════════════════════════════════ */
     var map, clusterer, geocoder;
     var watchId = null;
     var currentSites = [];
-    var failedList = [];
     var currentInfoWindow = null;
     var myLocMarker = null;
-    
-    // 상태 변수들
-    var isDistrictOn = false;
-    var currentMapTypeId = 'roadmap';
-    var isAbsoluteOrientation = false;
-    var isClusteringOn = true;
-    var isLabelOn = true;
-    var standaloneMarkers = [];
-    var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]);
-    var absentFilter = 'all';
-    var searchTypeFilter = 'mixed';
-    var quickSearchKeyword = "";
-    var pendingMarkerCoord = null;
 
+    /* UI/필터 상태 */
+    var isDistrictOn = false;            // 지적편집도 표시 여부
+    var currentMapTypeId = 'roadmap';    // 현재 지도 타입
+    var isClusteringOn = true;           // 클러스터링 ON/OFF
+    var isLabelOn = true;                // 마커 위 라벨 표시
+    var standaloneMarkers = [];          // 클러스터링 OFF일 때 직접 띄운 마커들
+    var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]); // 보이는 색상 코드들
+    var absentFilter = 'all';            // 'all' | 'yes' | 'no'
+    var searchTypeFilter = 'mixed';      // 'mixed' | 'address' | 'pole'
+    var quickSearchKeyword = "";         // 키워드 필터 (상호/주소 부분 일치)
+    var pendingMarkerCoord = null;       // 모달 확정 전 임시 좌표
+
+    /* 색상 코드 → HEX 매핑 (1~10) */
     var colorMap = {
         1:"#0055AA", 2:"#EF4444", 3:"#22C55E", 4:"#F97316",
         5:"#A855F7", 6:"#EC4899", 7:"#EAB308", 8:"#06B6D4",
         9:"#78350F", 10:"#1F2937"
     };
-    var ABSENT_COLOR_CODE = 5;
+    var ABSENT_COLOR_CODE = 5; // 부재 처리 시 강제로 적용할 색상
 
-    /* ── 설정 저장 및 불러오기 ── */
+    /* ═══════════════════════════════════════════════════════════
+       [설정 영속화] localStorage에 UI 설정 저장/복구
+       └ 새로고침해도 필터/지도 타입 등 유지
+    ═══════════════════════════════════════════════════════════ */
     function saveSettings() {
         var settings = {
-            isClusteringOn: isClusteringOn,
-            isLabelOn: isLabelOn,
-            isDistrictOn: isDistrictOn,
+            isClusteringOn, isLabelOn, isDistrictOn,
             mapTypeId: currentMapTypeId,
-            absentFilter: absentFilter,
-            searchTypeFilter: searchTypeFilter,
+            absentFilter, searchTypeFilter,
             activeColorFilters: Array.from(activeColorFilters)
         };
         localStorage.setItem('kesco_settings', JSON.stringify(settings));
@@ -422,60 +476,69 @@
         var saved = localStorage.getItem('kesco_settings');
         if (!saved) return;
 
-        var settings = JSON.parse(saved);
-        
-        if (settings.isClusteringOn !== undefined) isClusteringOn = settings.isClusteringOn;
-        if (settings.isLabelOn !== undefined) isLabelOn = settings.isLabelOn;
-        if (settings.isDistrictOn !== undefined) isDistrictOn = settings.isDistrictOn;
-        if (settings.mapTypeId) currentMapTypeId = settings.mapTypeId;
-        if (settings.absentFilter) absentFilter = settings.absentFilter;
-        if (settings.searchTypeFilter) searchTypeFilter = settings.searchTypeFilter;
-        if (settings.activeColorFilters) activeColorFilters = new Set(settings.activeColorFilters);
+        var s = JSON.parse(saved);
+        // 저장된 값이 있을 때만 덮어쓰기 (?? 연산자로 간결화)
+        isClusteringOn   = s.isClusteringOn   ?? isClusteringOn;
+        isLabelOn        = s.isLabelOn        ?? isLabelOn;
+        isDistrictOn     = s.isDistrictOn     ?? isDistrictOn;
+        currentMapTypeId = s.mapTypeId        ?? currentMapTypeId;
+        absentFilter     = s.absentFilter     ?? absentFilter;
+        searchTypeFilter = s.searchTypeFilter ?? searchTypeFilter;
+        if (s.activeColorFilters) activeColorFilters = new Set(s.activeColorFilters);
 
-        // UI 텍스트/스타일 복구
+        // 라벨 버튼 텍스트/스타일 동기화
         var labelBtn = document.getElementById('label-btn');
         labelBtn.innerText = isLabelOn ? '🏷️ 주소 라벨 ON' : '🏷️ 주소 라벨 OFF';
         labelBtn.classList.toggle('off', !isLabelOn);
 
+        // 클러스터링 버튼 텍스트/스타일 동기화
         var clusterBtn = document.getElementById('cluster-btn');
         clusterBtn.innerText = isClusteringOn ? '🔵 클러스터링 ON' : '⚪ 클러스터링 OFF';
         clusterBtn.classList.toggle('off', !isClusteringOn);
 
+        // 부재 필터 pill 동기화
         ['all','yes','no'].forEach(function(v) {
-            document.getElementById('filter-absent-' + v).className = 'pill' + (v === absentFilter ? (absentFilter === 'yes' ? ' on-absent' : ' on') : '');
+            document.getElementById('filter-absent-' + v).className =
+                'pill' + (v === absentFilter ? (absentFilter === 'yes' ? ' on-absent' : ' on') : '');
         });
 
+        // 조회 방식 type-chip 동기화
         ['mixed','address','pole'].forEach(function(v) {
             document.getElementById('filter-type-' + v).classList.toggle('on', v === searchTypeFilter);
         });
 
+        // 색상 칩 on/off 동기화
         document.querySelectorAll('#color-filter-chips .color-chip').forEach(function(chip) {
-            var code = parseInt(chip.dataset.code);
-            if (activeColorFilters.has(code)) chip.classList.add('on');
-            else chip.classList.remove('on');
+            chip.classList.toggle('on', activeColorFilters.has(parseInt(chip.dataset.code)));
         });
 
-        // 지도 뷰/지적도 상태 복구
-        var r = document.getElementById('btn-road'), s = document.getElementById('btn-sky'), d = document.getElementById('btn-district');
+        // 지도 타입(일반/위성) 복구
+        var r = document.getElementById('btn-road'),
+            s2 = document.getElementById('btn-sky'),
+            d = document.getElementById('btn-district');
         if (currentMapTypeId === 'roadmap') {
             map.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
-            r.className = 'm-type-btn active'; s.className = 'm-type-btn inactive';
+            r.className = 'm-type-btn active'; s2.className = 'm-type-btn inactive';
         } else {
             map.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
-            s.className = 'm-type-btn active'; r.className = 'm-type-btn inactive';
+            s2.className = 'm-type-btn active'; r.className = 'm-type-btn inactive';
         }
+        // 지적편집도 오버레이 복구
         if (isDistrictOn) {
             map.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
             d.className = 'm-type-btn active';
         }
     }
 
-    /* ── 색상 칩 생성 ── */
+    /* ═══════════════════════════════════════════════════════════
+       [색상 칩 동적 생성] 1~10 색상에 대한 토글 칩
+    ═══════════════════════════════════════════════════════════ */
     function buildColorChips() {
         var wrap = document.getElementById('color-filter-chips');
         if (!wrap) return;
         wrap.innerHTML = '';
         for (var c = 1; c <= 10; c++) {
+            // IIFE로 클로저에 code 고정 (var 스코프 이슈 방지)
             (function(code) {
                 var chip = document.createElement('div');
                 chip.className = 'color-chip on';
@@ -489,7 +552,10 @@
     }
     buildColorChips();
 
-    /* ── 필터 토글 동작 (설정 저장 추가) ── */
+    /* ═══════════════════════════════════════════════════════════
+       [필터 토글 함수들]
+       └ 모두 saveSettings() + drawMarkers() 호출로 즉시 반영
+    ═══════════════════════════════════════════════════════════ */
     function toggleColorFilter(code, el) {
         if (activeColorFilters.has(code)) { activeColorFilters.delete(code); el.classList.remove('on'); }
         else { activeColorFilters.add(code); el.classList.add('on'); }
@@ -497,6 +563,7 @@
         drawMarkers();
     }
 
+    /** 전체 색상 토글: 모두 켜져있으면 모두 끄고, 아니면 모두 켜기 */
     function toggleAllColors() {
         if (activeColorFilters.size === 10) {
             activeColorFilters.clear();
@@ -528,11 +595,13 @@
         drawMarkers();
     }
 
+    /** 빠른 검색: 키워드 입력 후 적용 */
     function performQuickSearch() {
         quickSearchKeyword = document.getElementById('quick-search-input').value.trim().toLowerCase();
         drawMarkers();
     }
 
+    /* 라벨 ON/OFF 토글 */
     document.getElementById('label-btn').onclick = function() {
         isLabelOn = !isLabelOn;
         this.innerText = isLabelOn ? '🏷️ 주소 라벨 ON' : '🏷️ 주소 라벨 OFF';
@@ -541,6 +610,7 @@
         drawMarkers();
     };
 
+    /* 클러스터링 ON/OFF 토글 */
     document.getElementById('cluster-btn').onclick = function() {
         isClusteringOn = !isClusteringOn;
         this.innerText = isClusteringOn ? '🔵 클러스터링 ON' : '⚪ 클러스터링 OFF';
@@ -549,7 +619,9 @@
         drawMarkers();
     };
 
-    /* ── 지도 타입 토글 (설정 저장 추가) ── */
+    /* ═══════════════════════════════════════════════════════════
+       [지도 타입/오버레이 전환]
+    ═══════════════════════════════════════════════════════════ */
     function setMapType(type) {
         currentMapTypeId = type;
         var r = document.getElementById('btn-road'), s = document.getElementById('btn-sky');
@@ -563,6 +635,7 @@
         saveSettings();
     }
 
+    /** 지적편집도(USE_DISTRICT) 오버레이 토글 */
     function toggleDistrict() {
         var btn = document.getElementById('btn-district');
         if (isDistrictOn) {
@@ -575,16 +648,24 @@
         saveSettings();
     }
 
-    /* ── 필터링 ── */
+    /* ═══════════════════════════════════════════════════════════
+       [필터링 적용 → 표출 데이터 산출]
+       currentSites(원본) → 화면에 보일 사이트만 골라냄
+       └ 색상 + 부재 + 키워드 + 조회방식(혼합/주소만/인입주만) 적용
+       └ 좌표는 viewMode에 따라 addrLatLng 또는 poleLatLng 사용
+    ═══════════════════════════════════════════════════════════ */
     function getFilteredSites() {
         var results = [];
         currentSites.forEach(function(s) {
+            // 1) 색상 + 부재 필터
+            //    - 부재인 경우엔 색상 필터 무시(항상 보이게)
             var colorOk  = s.isAbsent || activeColorFilters.has(s.colorCode || 1);
             var absentOk = absentFilter === 'all'
                 || (absentFilter === 'yes' && s.isAbsent)
                 || (absentFilter === 'no'  && !s.isAbsent);
             if (!colorOk || !absentOk) return;
 
+            // 2) 키워드 필터 (제목/원본주소/매칭주소/인입주주소 모두 검사)
             if (quickSearchKeyword) {
                 var t  = (s.title    || "").toLowerCase();
                 var a1 = (s.addrText || "").toLowerCase();
@@ -594,6 +675,10 @@
                     && !a2.includes(quickSearchKeyword) && !a3.includes(quickSearchKeyword)) return;
             }
 
+            // 3) 조회 방식에 따라 표시할 좌표 결정
+            //    - mixed: 주소 좌표 우선, 없으면 인입주 좌표
+            //    - address: 주소 좌표 있을 때만
+            //    - pole: 인입주 좌표 있을 때만
             var activeData = null;
             if (searchTypeFilter === 'mixed') {
                 if      (s.addrLatLng) activeData = { ...s, lat: s.addrLatLng.lat, lng: s.addrLatLng.lng, addr: s.addrLatLng.addrStr, viewMode: 'address' };
@@ -609,6 +694,9 @@
         return results;
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [메뉴 패널 접기/펴기]
+    ═══════════════════════════════════════════════════════════ */
     function toggleMenu() {
         var box = document.getElementById('upload-box');
         var btn = document.getElementById('toggle-btn');
@@ -621,17 +709,23 @@
         contentDiv.style.display = contentDiv.style.display === 'none' ? 'block' : 'none';
     }
 
+    /** 주소 변환 실패 항목 목록 렌더링 */
     function renderFailedListUI() {
         var section  = document.getElementById('failed-section');
         var countSpan = document.getElementById('fail-count');
         var contentDiv = document.getElementById('failed-list-content');
+
+        // 둘 다 없으면 완전 실패, 인입주만 있으면 주소만 미흡
         var fails = [];
         currentSites.forEach(s => {
             if (!s.addrLatLng && !s.poleLatLng)      fails.push({ ...s, reason: "주소/인입주 모두 인식 불가" });
             else if (!s.addrLatLng && s.poleLatLng)  fails.push({ ...s, reason: "주소 미흡 (인입주 대체)" });
         });
+
         if (!fails.length) { section.style.display = 'none'; return; }
-        section.style.display = 'block'; countSpan.innerText = fails.length;
+
+        section.style.display = 'block';
+        countSpan.innerText = fails.length;
         contentDiv.innerHTML = fails.map(f =>
             `<div class="failed-item">
                 <b>${f.title}</b> <span style="color:var(--danger);font-weight:700;">[${f.reason}]</span><br>
@@ -641,68 +735,91 @@
         ).join('');
     }
 
-    /* ── 카카오 초기화 ── */
+    /* ═══════════════════════════════════════════════════════════
+       [Kakao Maps 초기화]
+       └ kakao.maps.load() 콜백 안에서만 SDK 객체 사용 가능
+    ═══════════════════════════════════════════════════════════ */
     kakao.maps.load(function() {
+        // 지도 생성: 전북 지역 중심, 줌레벨 8
         map = new kakao.maps.Map(document.getElementById('map'), {
             center: new kakao.maps.LatLng(35.9180, 127.1241), level: 8
         });
+
+        // 클러스터러: 줌레벨 6 이상에서 군집화
         clusterer = new kakao.maps.MarkerClusterer({
             map, averageCenter: true, minLevel: 6,
             styles: [{ width:'40px', height:'40px', background:'rgba(0,85,170,0.9)', borderRadius:'20px', color:'#fff', textAlign:'center', fontWeight:'bold', lineHeight:'41px' }]
         });
+
+        // 주소 → 좌표 변환기
         geocoder = new kakao.maps.services.Geocoder();
 
-        // [핵심 변경점] 맵 초기화 직후 저장된 설정을 바로 불러옵니다.
+        // 지도 객체 생성 직후 저장 설정 복구
         loadAndApplySettings();
 
-        // 이벤트 리스너들
+        // 우클릭(데스크톱) → 마커 추가 모달
         kakao.maps.event.addListener(map, 'rightclick', function(e) { addManualMarker(e.latLng); });
+
+        // 지도 빈 공간 클릭 → 인포윈도우 닫기
         kakao.maps.event.addListener(map, 'click', function() {
             if (currentInfoWindow) { currentInfoWindow.setMap(null); currentInfoWindow = null; }
         });
 
-        // 롱프레스 모바일
-        var mapDiv = document.getElementById('map'), rippleEl = document.getElementById('longpress-ripple');
+        /* ─── 모바일 롱프레스(0.6초) → 마커 추가 ───
+           터치 시작 시 타이머 시작, 이동/추가터치 발생 시 취소
+           clientX/Y → containerPoint → LatLng 변환 */
+        var mapDiv = document.getElementById('map'),
+            rippleEl = document.getElementById('longpress-ripple');
         var lpTimer = null, lpMoved = false, lpStartX, lpStartY;
-        function showRipple(x,y){ rippleEl.style.left=x+'px'; rippleEl.style.top=y+'px'; rippleEl.classList.add('active'); }
-        function hideRipple(){ rippleEl.classList.remove('active'); }
 
-        mapDiv.addEventListener('touchstart',function(e){
-            if(e.touches.length>1){clearTimeout(lpTimer);hideRipple();lpMoved=true;return;}
-            lpMoved = false; 
-            lpStartX = e.touches[0].clientX; 
+        function showRipple(x,y) {
+            rippleEl.style.left = x + 'px';
+            rippleEl.style.top  = y + 'px';
+            rippleEl.classList.add('active');
+        }
+        function hideRipple() { rippleEl.classList.remove('active'); }
+
+        mapDiv.addEventListener('touchstart', function(e) {
+            // 멀티터치(핀치줌)면 롱프레스 취소
+            if (e.touches.length > 1) { clearTimeout(lpTimer); hideRipple(); lpMoved = true; return; }
+            lpMoved  = false;
+            lpStartX = e.touches[0].clientX;
             lpStartY = e.touches[0].clientY;
             showRipple(lpStartX, lpStartY);
-            
-            lpTimer = setTimeout(function(){
-                if(lpMoved) return;
-                var proj = map.getProjection();
-                var rect = mapDiv.getBoundingClientRect();
+
+            lpTimer = setTimeout(function() {
+                if (lpMoved) return;
+                var proj  = map.getProjection();
+                var rect  = mapDiv.getBoundingClientRect();
                 var point = new kakao.maps.Point(lpStartX - rect.left, lpStartY - rect.top);
                 var coord = proj.coordsFromContainerPoint(point);
-                if(navigator.vibrate) navigator.vibrate(50);
-                hideRipple(); 
+                if (navigator.vibrate) navigator.vibrate(50); // 햅틱 피드백
+                hideRipple();
                 addManualMarker(coord);
             }, 600);
-        },{passive:true});
-        
-        mapDiv.addEventListener('touchmove',function(e){
-            if(e.touches.length>1){clearTimeout(lpTimer);hideRipple();lpMoved=true;return;}
-            if(Math.abs(e.touches[0].clientX-lpStartX)>8 || Math.abs(e.touches[0].clientY-lpStartY)>8){
+        }, { passive: true });
+
+        mapDiv.addEventListener('touchmove', function(e) {
+            if (e.touches.length > 1) { clearTimeout(lpTimer); hideRipple(); lpMoved = true; return; }
+            // 8px 이상 이동하면 스크롤로 간주, 롱프레스 취소
+            if (Math.abs(e.touches[0].clientX - lpStartX) > 8 || Math.abs(e.touches[0].clientY - lpStartY) > 8) {
                 lpMoved = true; clearTimeout(lpTimer); hideRipple();
             }
-        },{passive:true});
-        
-        mapDiv.addEventListener('touchend',  function(){clearTimeout(lpTimer);hideRipple();},{passive:true});
-        mapDiv.addEventListener('touchcancel',function(){clearTimeout(lpTimer);hideRipple();lpMoved=true;},{passive:true});
+        }, { passive: true });
 
-        // 데이터 복구 및 렌더링
+        mapDiv.addEventListener('touchend',    function() { clearTimeout(lpTimer); hideRipple(); }, { passive: true });
+        mapDiv.addEventListener('touchcancel', function() { clearTimeout(lpTimer); hideRipple(); lpMoved = true; }, { passive: true });
+
+        // 저장된 마커 데이터 복구
         var saved = localStorage.getItem('kesco_map_data');
         if (saved) {
             var parsed = JSON.parse(saved);
+            // 구버전 데이터 구조(addrLatLng 없음) 감지 시 폐기
             if (parsed.length > 0 && parsed[0].addrLatLng === undefined && parsed[0].lat !== undefined) {
-                localStorage.removeItem('kesco_map_data'); currentSites = [];
+                localStorage.removeItem('kesco_map_data');
+                currentSites = [];
             } else {
+                // 레거시 originalColorCode 키 → colorCode로 마이그레이션
                 parsed.forEach(s => {
                     if (s.originalColorCode) { s.colorCode = s.originalColorCode; delete s.originalColorCode; }
                 });
@@ -712,18 +829,42 @@
         }
     });
 
-    /* ── 기타 유틸 함수들 ── */
+    /* ═══════════════════════════════════════════════════════════
+       [공용 유틸]
+    ═══════════════════════════════════════════════════════════ */
+    /** 두 좌표 간 거리(km) - Haversine 공식 */
     function getDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+        const R = 6371,
+              dLat = (lat2-lat1) * Math.PI/180,
+              dLon = (lon2-lon1) * Math.PI/180;
+        const a = Math.sin(dLat/2)**2
+                + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
+    /** 정렬 기준이 될 참조 좌표를 구함 (내 위치 → 마지막 사이트 → 평균값) */
+    function getReferenceCoord() {
+        if (myLocMarker) {
+            var p = myLocMarker.getPosition();
+            return { lat: p.getLat(), lng: p.getLng() };
+        }
+        var valids = currentSites.filter(s => s.addrLatLng || s.poleLatLng);
+        if (valids.length) {
+            var t = valids[valids.length - 1];
+            return t.addrLatLng || t.poleLatLng;
+        }
+        return null;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       [수동 마커 추가] 모달 → 좌표→주소 역지오코딩 → 등록
+    ═══════════════════════════════════════════════════════════ */
     function addManualMarker(latLng) {
         pendingMarkerCoord = latLng;
         document.getElementById('modal-input-title').value = '';
-        document.getElementById('modal-input-memo').value = '';
+        document.getElementById('modal-input-memo').value  = '';
         document.getElementById('custom-modal').style.display = 'flex';
+        // 모달 떠오른 후 첫 입력칸에 포커스
         setTimeout(() => document.getElementById('modal-input-title').focus(), 100);
     }
 
@@ -734,107 +875,168 @@
 
     function confirmMarkerModal() {
         var title = document.getElementById('modal-input-title').value.trim();
-        var memo = document.getElementById('modal-input-memo').value.trim();
-        if(!title) { alert("상호를 입력해주세요."); document.getElementById('modal-input-title').focus(); return; }
+        var memo  = document.getElementById('modal-input-memo').value.trim();
+        if (!title) {
+            alert("상호를 입력해주세요.");
+            document.getElementById('modal-input-title').focus();
+            return;
+        }
 
         document.getElementById('custom-modal').style.display = 'none';
         var latLng = pendingMarkerCoord;
 
+        // 좌표를 주소로 역변환 (도로명 우선, 없으면 지번)
         geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
             var addrStr = "수동 등록 지점";
             if (status === kakao.maps.services.Status.OK) {
                 addrStr = result[0].road_address ? result[0].road_address.address_name : result[0].address.address_name;
             }
             currentSites.push({
-                id: crypto.randomUUID(), title: title, addrText: addrStr, colorCode: 2, poleNum: "",
+                id: crypto.randomUUID(),
+                title: title,
+                addrText: addrStr,
+                colorCode: 2,           // 수동 추가는 빨간색 기본
+                poleNum: "",
                 addrLatLng: { lat: latLng.getLat(), lng: latLng.getLng(), addrStr: addrStr },
-                poleLatLng: null, isAbsent: false, memo: memo || ""
+                poleLatLng: null,
+                isAbsent: false,
+                memo: memo || ""
             });
             saveAndRender();
         });
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [인입주 단일 조회]
+       └ 8자리 번호 입력 → 첫 4자리로 GitHub CSV 다운로드
+       └ 같은 번호 여러 개면 참조 좌표 기준 최단거리 1건만 추가
+    ═══════════════════════════════════════════════════════════ */
     async function searchPole() {
         var poleNum = document.getElementById('pole-input').value.toUpperCase().trim();
         if (poleNum.length !== 8) { alert("인입주번호 8자리를 입력해주세요."); return; }
+
         var st = document.getElementById('status');
         st.innerText = "검색 중...";
+
+        // CSV는 4자리 prefix별로 분리되어 있음 / 캐시 회피용 timestamp 추가
         var url = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${poleNum.substring(0,4)}.csv?t=${Date.now()}`;
+
         try {
             var res = await fetch(url);
             if (!res.ok) { alert("데이터를 찾을 수 없습니다."); st.innerText = "조회 실패"; return; }
-            var text = await res.text();
+
+            var text  = await res.text();
             var lines = text.trim().split('\n');
             var found = [];
+
+            // CSV: 0=인입주번호, 1=주소, 2=경도(lng), 3=위도(lat)
             for (var i = 1; i < lines.length; i++) {
                 var cols = lines[i].split(',');
                 if (cols[0] && cols[0].trim().toUpperCase() === poleNum) {
                     var lng = parseFloat(cols[2]), lat = parseFloat(cols[3]);
-                    if (!isNaN(lat) && !isNaN(lng)) found.push({ meshno:cols[0].trim(), addr:cols[1]?cols[1].trim():"주소 없음", lng, lat });
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        found.push({ meshno: cols[0].trim(), addr: cols[1] ? cols[1].trim() : "주소 없음", lng, lat });
+                    }
                 }
             }
+
             if (!found.length) { alert("번호를 찾을 수 없습니다."); st.innerText = "조회 실패"; return; }
 
-            var ref = myLocMarker ? { lat:myLocMarker.getPosition().getLat(), lng:myLocMarker.getPosition().getLng() } : null;
-            if (!ref) {
-                var valids = currentSites.filter(s => s.addrLatLng || s.poleLatLng);
-                if (valids.length) { var t = valids[valids.length-1]; ref = t.addrLatLng || t.poleLatLng; }
+            // 다중 결과면 참조 좌표 기준 가장 가까운 1건만 채택
+            var ref = getReferenceCoord();
+            if (ref) {
+                found.sort((a,b) => getDistance(ref.lat,ref.lng,a.lat,a.lng) - getDistance(ref.lat,ref.lng,b.lat,b.lng));
+                found = [found[0]];
             }
-            if (ref) { found.sort((a,b) => getDistance(ref.lat,ref.lng,a.lat,a.lng) - getDistance(ref.lat,ref.lng,b.lat,b.lng)); found = [found[0]]; }
 
             found.forEach(function(f) {
                 currentSites.push({
-                    id: crypto.randomUUID(), title:"전주: "+f.meshno, addrText:f.addr,
-                    colorCode:7, poleNum:f.meshno,
-                    addrLatLng:null, poleLatLng:{lat:f.lat,lng:f.lng,addrStr:f.addr},
-                    isAbsent:false, memo:"인입주 단일 검색 추가"
+                    id: crypto.randomUUID(),
+                    title: "전주: " + f.meshno,
+                    addrText: f.addr,
+                    colorCode: 7,
+                    poleNum: f.meshno,
+                    addrLatLng: null,
+                    poleLatLng: { lat: f.lat, lng: f.lng, addrStr: f.addr },
+                    isAbsent: false,
+                    memo: "인입주 단일 검색 추가"
                 });
             });
-            toggleSearchTypeFilter('mixed'); // 이 함수 안에서 자동으로 saveSettings()가 호출됩니다.
+
+            // 검색 결과 보이도록 혼합 모드로 강제 전환
+            toggleSearchTypeFilter('mixed');
             saveAndRender();
+
+            // 해당 위치로 카메라 이동
             map.setCenter(new kakao.maps.LatLng(found[0].lat, found[0].lng));
             map.setLevel(2);
             st.innerText = ref ? "최단거리 조회 성공!" : "조회 성공!";
-        } catch(e) { alert(`조회 에러: ${e.message}`); st.innerText = "오류 발생"; }
+        } catch(e) {
+            alert(`조회 에러: ${e.message}`);
+            st.innerText = "오류 발생";
+        }
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [엑셀 업로드 → 일괄 등록]
+       1) A:상호  B:주소  C:색상코드  D:인입주
+       2) 주소 → 좌표 변환 (40ms 간격으로 throttling)
+       3) 인입주 prefix별 CSV 다운로드 → poleDict 구성
+       4) 각 사이트에 addrLatLng / poleLatLng 채우기
+       5) 표시 후 bounds로 카메라 핏
+    ═══════════════════════════════════════════════════════════ */
     document.getElementById('upload-btn').onclick = async function() {
         var file = document.getElementById('excel-file').files[0];
         if (!file) return alert("파일을 선택해주세요.");
+
         var reader = new FileReader();
         reader.onload = async function(e) {
-            var wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+            // ─ (1) 엑셀 → JSON 배열 ─
+            var wb   = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
             var json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1 });
-            var rows = json.slice(1).filter(r => r[0] || r[1] || r[3]);
+            var rows = json.slice(1).filter(r => r[0] || r[1] || r[3]); // 1행 헤더 제외, 빈 행 제거
             if (!rows.length) { alert("유효한 데이터가 없습니다."); return; }
 
             document.getElementById('status').innerText = "주소 변환 시작...";
+
+            // ─ (2) 사이트 객체 생성 ─
             var newSites = rows.map(r => ({
-                id: crypto.randomUUID(),
-                title:    r[0] ? r[0].toString() : '이름없음',
-                addrText: r[1] ? r[1].toString().trim() : '',
-                colorCode:r[2] || 1,
-                poleNum:  r[3] ? r[3].toString().toUpperCase().trim() : '',
-                addrLatLng:null, poleLatLng:null, isAbsent:false, memo:""
+                id:        crypto.randomUUID(),
+                title:     r[0] ? r[0].toString() : '이름없음',
+                addrText:  r[1] ? r[1].toString().trim() : '',
+                colorCode: r[2] || 1,
+                poleNum:   r[3] ? r[3].toString().toUpperCase().trim() : '',
+                addrLatLng: null,
+                poleLatLng: null,
+                isAbsent: false,
+                memo: ""
             }));
 
+            // ─ (3) 주소 지오코딩 (병렬, 40ms 간격) ─
+            //   카카오 geocoder 부하 방지용 throttling
             await Promise.all(newSites.map((site, idx) => new Promise(resolve => {
                 if (!site.addrText) return resolve();
                 setTimeout(() => {
                     geocoder.addressSearch(site.addrText, function(result, status) {
                         if (status === kakao.maps.services.Status.OK && result.length > 0) {
                             var a = result[0];
-                            var exact = (a.road_address && a.road_address.main_building_no) || (a.address && a.address.main_address_no);
-                            if (exact) site.addrLatLng = { lat:parseFloat(a.y), lng:parseFloat(a.x), addrStr:site.addrText };
+                            // 정확한 번지/건물번호가 있을 때만 인정 (도로명 우선)
+                            var exact = (a.road_address && a.road_address.main_building_no)
+                                     || (a.address      && a.address.main_address_no);
+                            if (exact) site.addrLatLng = { lat: parseFloat(a.y), lng: parseFloat(a.x), addrStr: site.addrText };
                         }
                         resolve();
                     });
                 }, idx * 40);
             })));
 
+            // ─ (4) 인입주 백업 좌표 다운로드 ─
             document.getElementById('status').innerText = "인입주 백업 정보 다운로드 중...";
-            var polePrefixes = [...new Set(newSites.filter(s => s.poleNum && s.poleNum.length===8).map(s => s.poleNum.substring(0,4)))];
-            var poleDict = {};
+            var polePrefixes = [...new Set(
+                newSites.filter(s => s.poleNum && s.poleNum.length === 8).map(s => s.poleNum.substring(0,4))
+            )];
+            var poleDict = {}; // { 인입주번호: [{lat,lng,addr}, ...] }
+
             for (var i = 0; i < polePrefixes.length; i++) {
                 try {
                     var r = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${polePrefixes[i]}.csv?t=${Date.now()}`);
@@ -842,34 +1044,44 @@
                         (await r.text()).trim().split('\n').slice(1).forEach(line => {
                             var cols = line.split(',');
                             if (cols.length >= 4 && cols[0]) {
-                                var pn = cols[0].trim().toUpperCase();
-                                var lng = parseFloat(cols[2]), lat = parseFloat(cols[3]);
+                                var pn  = cols[0].trim().toUpperCase();
+                                var lng = parseFloat(cols[2]),
+                                    lat = parseFloat(cols[3]);
                                 if (!isNaN(lat) && !isNaN(lng)) {
                                     if (!poleDict[pn]) poleDict[pn] = [];
-                                    poleDict[pn].push({ lat, lng, addr: cols[1]?cols[1].trim():"NDIS 주소 없음" });
+                                    poleDict[pn].push({ lat, lng, addr: cols[1] ? cols[1].trim() : "NDIS 주소 없음" });
                                 }
                             }
                         });
                     }
-                } catch(e) {}
+                } catch(e) { /* 한 prefix 실패해도 진행 */ }
             }
 
+            // ─ (5) 같은 인입주번호가 여러 개면 참조 좌표 기준 가장 가까운 것 선택 ─
+            //   참조: 내 위치 우선 → 없으면 주소 매칭된 것들의 평균
             var ref = null;
-            if (myLocMarker) { ref = { lat:myLocMarker.getPosition().getLat(), lng:myLocMarker.getPosition().getLng() }; }
-            else {
+            if (myLocMarker) {
+                ref = { lat: myLocMarker.getPosition().getLat(), lng: myLocMarker.getPosition().getLng() };
+            } else {
                 var va = newSites.filter(s => s.addrLatLng);
-                if (va.length) { var sl=0,sg=0; va.forEach(s=>{sl+=s.addrLatLng.lat;sg+=s.addrLatLng.lng;}); ref={lat:sl/va.length,lng:sg/va.length}; }
+                if (va.length) {
+                    var sl=0, sg=0;
+                    va.forEach(s => { sl += s.addrLatLng.lat; sg += s.addrLatLng.lng; });
+                    ref = { lat: sl/va.length, lng: sg/va.length };
+                }
             }
             newSites.forEach(site => {
                 if (site.poleNum && poleDict[site.poleNum]?.length) {
                     var m = poleDict[site.poleNum];
                     if (ref) m.sort((a,b) => getDistance(ref.lat,ref.lng,a.lat,a.lng) - getDistance(ref.lat,ref.lng,b.lat,b.lng));
-                    site.poleLatLng = { lat:m[0].lat, lng:m[0].lng, addrStr:m[0].addr };
+                    site.poleLatLng = { lat: m[0].lat, lng: m[0].lng, addrStr: m[0].addr };
                 }
             });
 
+            // ─ (6) 적용 + 화면 핏 ─
             currentSites = newSites;
-            quickSearchKeyword = ""; document.getElementById('quick-search-input').value = "";
+            quickSearchKeyword = "";
+            document.getElementById('quick-search-input').value = "";
             saveAndRender();
 
             var activeMarkers = getFilteredSites();
@@ -878,57 +1090,100 @@
                 activeMarkers.forEach(s => bounds.extend(new kakao.maps.LatLng(s.lat, s.lng)));
                 setTimeout(() => map.setBounds(bounds, 40,40,40,40), 200);
             }
-            toggleMenu();
+            toggleMenu(); // 작업 후 메뉴 자동 접기
         };
         reader.readAsArrayBuffer(file);
     };
 
+    /* ═══════════════════════════════════════════════════════════
+       [디바이스 방향(나침반) → 화살표 회전]
+       └ iOS Safari: webkitCompassHeading 사용
+       └ Android Chrome: deviceorientationabsolute의 alpha 사용
+    ═══════════════════════════════════════════════════════════ */
     function handleOrientation(event) {
         var heading = null;
-        if(event.webkitCompassHeading !== undefined) heading = event.webkitCompassHeading;
-        else if(event.absolute === true && event.alpha !== null) { isAbsoluteOrientation = true; heading = 360 - event.alpha; }
-        else if(!isAbsoluteOrientation && event.alpha !== null) heading = 360 - event.alpha;
-        
-        if(heading !== null) {
+        if (event.webkitCompassHeading !== undefined) {
+            heading = event.webkitCompassHeading;
+        } else if (event.alpha !== null) {
+            heading = 360 - event.alpha;
+        }
+
+        if (heading !== null) {
             var arr = document.getElementById('direction-arrow');
-            if(arr) { arr.style.display = 'block'; arr.style.transform = 'rotate(' + heading + 'deg)'; }
+            if (arr) {
+                arr.style.display   = 'block';
+                arr.style.transform = 'rotate(' + heading + 'deg)';
+            }
         }
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [내 위치 마커 생성 헬퍼]
+       └ track-btn / focusMyLocation 양쪽에서 재사용
+    ═══════════════════════════════════════════════════════════ */
+    function ensureMyLocMarker(loc) {
+        if (myLocMarker) {
+            myLocMarker.setPosition(loc);
+            return;
+        }
+        var c = document.createElement('div');
+        c.className = 'my-location-marker';
+        c.innerHTML = '<div id="direction-arrow" class="direction-arrow" style="display:none;"></div><div class="location-dot"></div>';
+        c.style.pointerEvents = 'none';
+        myLocMarker = new kakao.maps.CustomOverlay({
+            position: loc, content: c, xAnchor: 0.5, yAnchor: 0.5, zIndex: 10
+        });
+        myLocMarker.setMap(map);
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       [위치 표기 시작/중단 토글]
+    ═══════════════════════════════════════════════════════════ */
     document.getElementById('track-btn').onclick = function() {
         if (watchId) {
+            // ── 추적 중단 ──
             navigator.geolocation.clearWatch(watchId); watchId = null;
             window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
-            window.removeEventListener('deviceorientation', handleOrientation, true);
-            isAbsoluteOrientation = false;
-            
+            window.removeEventListener('deviceorientation',         handleOrientation, true);
+
             if (myLocMarker) { myLocMarker.setMap(null); myLocMarker = null; }
-            this.innerText = "📡 위치 표기 시작"; this.className = 'btn btn-outline';
+            this.innerText = "📡 위치 표기 시작";
+            this.className = 'btn btn-outline';
             document.getElementById('my-loc-fab').classList.remove('active');
         } else {
-            if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function')
-                DeviceOrientationEvent.requestPermission().then(r => { if (r==='granted') window.addEventListener('deviceorientation',handleOrientation,true); });
-            else { window.addEventListener('deviceorientationabsolute',handleOrientation,true); window.addEventListener('deviceorientation',handleOrientation,true); }
-            
+            // ── 추적 시작 ──
+            // iOS 13+는 권한 요청 필요
+            if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().then(r => {
+                    if (r === 'granted') window.addEventListener('deviceorientation', handleOrientation, true);
+                });
+            } else {
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+                window.addEventListener('deviceorientation',         handleOrientation, true);
+            }
+
             if (navigator.geolocation) {
                 watchId = navigator.geolocation.watchPosition(function(pos) {
                     var loc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
-                    if (!myLocMarker) {
-                        var c = document.createElement('div'); c.className = 'my-location-marker';
-                        c.innerHTML = '<div id="direction-arrow" class="direction-arrow" style="display:none;"></div><div class="location-dot"></div>';
-                        c.style.pointerEvents = 'none';
-                        myLocMarker = new kakao.maps.CustomOverlay({ position:loc, content:c, xAnchor:0.5, yAnchor:0.5, zIndex:10 });
-                        myLocMarker.setMap(map); map.setCenter(loc);
-                    } else { myLocMarker.setPosition(loc); }
-                }, null, { enableHighAccuracy:true });
-                this.innerText = "🛑 표기 중단"; this.className = 'btn btn-primary';
+                    var isFirst = !myLocMarker;
+                    ensureMyLocMarker(loc);
+                    if (isFirst) map.setCenter(loc); // 처음 잡힐 때만 카메라 이동
+                }, null, { enableHighAccuracy: true });
+
+                this.innerText = "🛑 표기 중단";
+                this.className = 'btn btn-primary';
                 document.getElementById('my-loc-fab').classList.add('active');
             }
         }
     };
 
+    /* ═══════════════════════════════════════════════════════════
+       [내 위치 FAB] 한 번 클릭 시 카메라 이동, 추적 안 켜져있으면 자동 시작
+    ═══════════════════════════════════════════════════════════ */
     function focusMyLocation() {
         if (!navigator.geolocation) { alert("위치 정보가 지원되지 않는 환경입니다."); return; }
+
+        // 이미 추적 중이면 마지막 위치로 카메라만 이동
         if (watchId && myLocMarker) {
             map.setCenter(myLocMarker.getPosition());
             map.setLevel(4);
@@ -939,77 +1194,117 @@
             var loc = new kakao.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
             map.setCenter(loc);
             map.setLevel(4);
+            ensureMyLocMarker(loc);
 
-            if(!myLocMarker){
-                var c = document.createElement('div'); c.className = 'my-location-marker';
-                c.innerHTML = '<div id="direction-arrow" class="direction-arrow" style="display:none;"></div><div class="location-dot"></div>';
-                c.style.pointerEvents = 'none';
-                myLocMarker = new kakao.maps.CustomOverlay({ position:loc, content:c, xAnchor:0.5, yAnchor:0.5, zIndex:10 });
-                myLocMarker.setMap(map);
-            } else {
-                myLocMarker.setPosition(loc);
-            }
-            
-            if(!watchId) { document.getElementById('track-btn').click(); }
-        }, function(err) {
+            // 아직 추적 중이 아니면 시작
+            if (!watchId) document.getElementById('track-btn').click();
+        }, function() {
             alert("위치 정보를 가져올 수 없습니다. GPS 설정이나 브라우저 권한을 확인해주세요.");
         }, { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 });
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [라벨 HTML 생성]
+       └ 마커 위쪽에 띄우는 작은 텍스트 박스
+       └ 너무 길면 끝 3토큰만 사용 (예: "전북 완주군 ㅇㅇ읍 ㅇㅇ리 123" → "ㅇㅇ읍 ㅇㅇ리 123")
+    ═══════════════════════════════════════════════════════════ */
     function buildLabelHtml(labelText, color) {
         if (!isLabelOn || !labelText) return '';
+        // 끝의 영문 토큰들(우편번호 등) 제거 후 마지막 3단어만 추출
         var cleaned = labelText.replace(/(\s+[a-zA-Z]+)+$/g, '').trim();
-        var parts = cleaned.split(/\s+/);
-        var short = parts.length > 3 ? parts.slice(-3).join(' ') : cleaned;
+        var parts   = cleaned.split(/\s+/);
+        var short   = parts.length > 3 ? parts.slice(-3).join(' ') : cleaned;
         return `<div class="marker-label" style="border-top:2px solid ${color};">${short}</div>`;
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [마커 SVG 생성]
+       └ pole(인입주): 다이아몬드(💎) 모양
+       └ address(주소): 카카오맵 풍 별(⭐) 모양 핀
+       └ 모든 좌표는 viewBox 24×24 기준
+    ═══════════════════════════════════════════════════════════ */
+    function buildMarkerSvgPath(isPole) {
+        if (isPole) {
+            // 다이아몬드: 위쪽 절반 사다리꼴 + 아래쪽 절반 V자
+            return `<path d="M6 0 L18 0 L24 12 L12 24 L0 12 L6 0 Z" fill="{COLOR}"/>
+                    <circle cx="12" cy="9" r="3" fill="white"/>`;
+        }
+        // 카카오맵 기본 마커 풍 (둥근 핀 + 별)
+        // 핀 본체: 상단 원형 + 하단 뾰족한 꼬리
+        // 별: 5각 별 (24px viewBox 기준 중심 cx=12, cy=10, R=4.5)
+        return `
+            <path d="M12 0 C5.373 0 0 5.373 0 12 C0 19.5 12 24 12 24 C12 24 24 19.5 24 12 C24 5.373 18.627 0 12 0 Z"
+                  fill="{COLOR}"/>
+            <path d="M12 5.5 L13.4 9 L17 9.2 L14.2 11.6 L15.1 15 L12 13 L8.9 15 L9.8 11.6 L7 9.2 L10.6 9 Z"
+                  fill="white"/>
+        `;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       [마커 객체 빌드]
+       └ 같은 좌표(소수점 6자리)에 여러 사이트가 겹치면 그룹화
+       └ 각 그룹당 1개의 마커 생성, 클릭 시 인포윈도우에 모두 나열
+    ═══════════════════════════════════════════════════════════ */
     function buildMarkerObjects(sites) {
+        // 1) 동일 좌표끼리 그룹화
         var groups = {};
         sites.forEach(function(s) {
-            if (s.lat==null||s.lng==null||isNaN(s.lat)||isNaN(s.lng)) return;
+            if (s.lat == null || s.lng == null || isNaN(s.lat) || isNaN(s.lng)) return;
             var key = Number(s.lat).toFixed(6) + "," + Number(s.lng).toFixed(6);
-            if (!groups[key]) groups[key] = []; groups[key].push(s);
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(s);
         });
 
+        // 2) 각 그룹 → 1개의 CustomOverlay 마커
         return Object.values(groups).map(function(group) {
-            var first  = group[0];
+            var first     = group[0];
             var hasAbsent = group.some(s => s.isAbsent);
-            var mColor = hasAbsent ? colorMap[ABSENT_COLOR_CODE] : (colorMap[first.colorCode] || "#0055AA");
-            var isPole = first.viewMode === 'pole';
+            // 한 명이라도 부재면 그룹 전체 보라색
+            var mColor    = hasAbsent ? colorMap[ABSENT_COLOR_CODE] : (colorMap[first.colorCode] || "#0055AA");
+            var isPole    = first.viewMode === 'pole';
 
+            // 라벨 텍스트: 매칭주소 → 원본주소 → 제목 순
             var labelText = first.addr || first.addrText || first.title || '';
             var labelHtml = buildLabelHtml(labelText, mColor);
 
-            var svgPath = isPole
-                ? `<path d="M8 0 L22 0 L30 15 L15 40 L0 15 L8 0 Z" fill="${mColor}"/><circle cx="15" cy="12" r="5" fill="white"/>`
-                : `<path d="M15 0C6.716 0 0 6.716 0 15c0 11.25 15 25 15 25s15-13.75 15-25c0-8.284-6.716-15-15-15z" fill="${mColor}"/><circle cx="15" cy="15" r="6" fill="white"/>`;
+            // SVG 생성 (색상 치환)
+            var svgPath  = buildMarkerSvgPath(isPole).replace(/\{COLOR\}/g, mColor);
+            var svgInner = `<svg width="${MARKER_W}" height="${MARKER_H}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`;
 
+            // 마커 컨테이너 (라벨 + 아이콘)
             var markerContent = document.createElement('div');
             markerContent.style.cssText = "position:relative;display:inline-block;text-align:center;cursor:pointer;";
             markerContent.innerHTML = `
                 ${labelHtml}
-                <img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(`<svg width="30" height="40" viewBox="0 0 30 40" xmlns="http://www.w3.org/2000/svg">${svgPath}</svg>`)}"
-                     style="width:30px;height:40px;display:block;" />
+                <img src="data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgInner)}"
+                     style="width:${MARKER_W}px;height:${MARKER_H}px;display:block;" />
             `;
 
+            /* ─── 인포윈도우(클릭 시 팝업) 컨테이너 ─── */
             var container = document.createElement('div');
             container.className = 'iw-container';
             container.style.cssText = 'padding:15px;background:#fff;border-radius:14px;width:250px;box-shadow:0 6px 24px rgba(0,0,0,0.15);border:1px solid #E2E8F0;position:relative;cursor:default;';
 
-            var closeBtn = document.createElement('div'); closeBtn.innerHTML = '✕';
+            // 우상단 X 닫기 버튼
+            var closeBtn = document.createElement('div');
+            closeBtn.innerHTML = '✕';
             closeBtn.style.cssText = 'position:absolute;top:10px;right:10px;cursor:pointer;font-size:14px;color:#94A3B8;z-index:100;padding:4px;font-weight:bold;';
             container.appendChild(closeBtn);
 
-            var headerIcon = isPole ? '💎' : '💧';
-            var headerText = group.length > 1 ? `<b style="padding-right:18px;">${headerIcon} ${first.title}</b> 외 ${group.length-1}건` : `<b style="padding-right:18px;">${headerIcon} ${first.title}</b>`;
+            // 헤더: 첫 번째 항목 제목 + (외 N건)
+            var headerIcon = isPole ? '💎' : '⭐';
+            var headerText = group.length > 1
+                ? `<b style="padding-right:18px;">${headerIcon} ${first.title}</b> 외 ${group.length-1}건`
+                : `<b style="padding-right:18px;">${headerIcon} ${first.title}</b>`;
             var header = document.createElement('div');
             header.style.cssText = `border-bottom:2.5px solid ${mColor};padding-bottom:8px;margin-bottom:8px;color:${mColor};font-size:13.5px;`;
             header.innerHTML = headerText;
             container.appendChild(header);
 
+            // 그룹 일괄 삭제 버튼
             if (group.length > 1) {
-                var bulkDelBtn = document.createElement('button'); bulkDelBtn.className = 'bulk-del-btn';
+                var bulkDelBtn = document.createElement('button');
+                bulkDelBtn.className = 'bulk-del-btn';
                 bulkDelBtn.innerText = `🗑️ 이 위치 ${group.length}건 전체 삭제`;
                 bulkDelBtn.onclick = function() {
                     if (confirm(`이 위치에 겹쳐진 ${group.length}건을 모두 삭제하시겠습니까?`)) {
@@ -1023,51 +1318,102 @@
                 container.appendChild(bulkDelBtn);
             }
 
+            // 그룹 내 각 항목 리스트
             var listArea = document.createElement('div');
             listArea.style.cssText = 'max-height:320px;overflow-y:auto;';
 
             group.forEach(function(item) {
-                var itemDiv = document.createElement('div'); itemDiv.className = 'iw-item';
+                var itemDiv = document.createElement('div');
+                itemDiv.className = 'iw-item';
                 var poleDisplay = item.poleNum ? `<br><span style="color:var(--primary);">[인입주] ${item.poleNum}</span>` : '';
-                itemDiv.innerHTML = `<div style="font-weight:700;font-size:13px;color:var(--text);">${item.title}</div><div style="font-size:11px;color:var(--text-muted);">${item.addr}${poleDisplay}</div>`;
+                itemDiv.innerHTML = `
+                    <div style="font-weight:700;font-size:13px;color:var(--text);">${item.title}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${item.addr}${poleDisplay}</div>
+                `;
 
+                /* ─── 메모 표시/편집 영역 ─── */
                 var memoWrap    = document.createElement('div');
-                var memoDisplay = document.createElement('div'); memoDisplay.className = 'memo-text'; memoDisplay.title = '클릭하여 수정';
-                var memoEditor  = document.createElement('div'); memoEditor.style.display = 'none';
-                var textarea    = document.createElement('textarea'); textarea.className = 'memo-edit-area'; textarea.value = item.memo||'';
-                var saveBtn     = document.createElement('button'); saveBtn.className = 'memo-save-btn'; saveBtn.innerText = '저장';
+                var memoDisplay = document.createElement('div');
+                memoDisplay.className = 'memo-text';
+                memoDisplay.title = '클릭하여 수정';
 
-                memoDisplay.innerText = item.memo ? "📝 "+item.memo : "📝 메모 추가";
-                if (!item.memo) memoDisplay.style.cssText = 'color:#aaa;background:#f9f9f9;border-left-color:#ccc;font-size:11px;margin:5px 0;padding:6px 8px;border-radius:4px;cursor:pointer;font-style:italic;border-left:3px solid #ccc;';
+                var memoEditor = document.createElement('div');
+                memoEditor.style.display = 'none';
+                var textarea = document.createElement('textarea');
+                textarea.className = 'memo-edit-area';
+                textarea.value = item.memo || '';
+                var saveBtn = document.createElement('button');
+                saveBtn.className = 'memo-save-btn';
+                saveBtn.innerText = '저장';
 
+                memoDisplay.innerText = item.memo ? "📝 " + item.memo : "📝 메모 추가";
+                // 빈 메모는 흐리게 표시
+                if (!item.memo) {
+                    memoDisplay.style.cssText = 'color:#aaa;background:#f9f9f9;border-left-color:#ccc;font-size:11px;margin:5px 0;padding:6px 8px;border-radius:4px;cursor:pointer;font-style:italic;border-left:3px solid #ccc;';
+                }
+
+                // 저장 버튼: currentSites 원본 갱신 → 영속화
                 saveBtn.onclick = function() {
                     var realItem = currentSites.find(s => s.id === item.id);
                     if (realItem) {
                         realItem.memo = textarea.value.trim();
-                        memoDisplay.innerText = realItem.memo ? "📝 "+realItem.memo : "📝 메모 추가";
-                        if (!realItem.memo) { memoDisplay.style.color='#aaa'; memoDisplay.style.background='#f9f9f9'; memoDisplay.style.borderLeftColor='#ccc'; }
-                        else { memoDisplay.style.color='var(--success)'; memoDisplay.style.background='var(--success-light)'; memoDisplay.style.borderLeftColor='var(--success)'; }
-                        saveAndRender(false);
+                        memoDisplay.innerText = realItem.memo ? "📝 " + realItem.memo : "📝 메모 추가";
+                        if (!realItem.memo) {
+                            memoDisplay.style.color = '#aaa';
+                            memoDisplay.style.background = '#f9f9f9';
+                            memoDisplay.style.borderLeftColor = '#ccc';
+                        } else {
+                            memoDisplay.style.color = 'var(--success)';
+                            memoDisplay.style.background = 'var(--success-light)';
+                            memoDisplay.style.borderLeftColor = 'var(--success)';
+                        }
+                        saveAndRender(false); // 메모 수정 시 다시 그릴 필요는 없음
                     }
-                    memoEditor.style.display='none'; memoDisplay.style.display='block';
+                    memoEditor.style.display  = 'none';
+                    memoDisplay.style.display = 'block';
                 };
-                memoDisplay.onclick = function() { memoDisplay.style.display='none'; memoEditor.style.display='block'; textarea.focus(); };
-                memoEditor.append(textarea, saveBtn); memoWrap.append(memoDisplay, memoEditor); itemDiv.append(memoWrap);
+                memoDisplay.onclick = function() {
+                    memoDisplay.style.display = 'none';
+                    memoEditor.style.display  = 'block';
+                    textarea.focus();
+                };
+                memoEditor.append(textarea, saveBtn);
+                memoWrap.append(memoDisplay, memoEditor);
+                itemDiv.append(memoWrap);
 
-                var absLabel = document.createElement('label'); absLabel.className = 'absent-row';
-                var chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = item.isAbsent;
+                /* ─── 부재 체크박스 ─── */
+                var absLabel = document.createElement('label');
+                absLabel.className = 'absent-row';
+                var chk = document.createElement('input');
+                chk.type = 'checkbox';
+                chk.checked = item.isAbsent;
                 chk.onchange = function() {
                     var realItem = currentSites.find(s => s.id === item.id);
                     if (realItem) { realItem.isAbsent = chk.checked; saveAndRender(true); }
                 };
-                absLabel.append(chk, ' 미점검 (부재)'); itemDiv.append(absLabel);
+                absLabel.append(chk, ' 미점검 (부재)');
+                itemDiv.append(absLabel);
 
-                var g = document.createElement('div'); g.className = 'iw-btn-group';
-                var n = document.createElement('a'); n.className='nav-btn'; n.href=`https://map.kakao.com/link/to/${item.title},${item.lat},${item.lng}`; n.target="_blank"; n.innerText="🚗 길찾기";
-                var rv= document.createElement('a'); rv.className='rv-btn'; rv.href=`https://map.kakao.com/link/roadview/${item.lat},${item.lng}`; rv.target="_blank"; rv.innerText="👁️ 로드뷰";
-                g.append(n, rv); itemDiv.append(g);
+                /* ─── 길찾기 / 로드뷰 외부 링크 ─── */
+                var g = document.createElement('div');
+                g.className = 'iw-btn-group';
+                var n = document.createElement('a');
+                n.className = 'nav-btn';
+                n.href = `https://map.kakao.com/link/to/${item.title},${item.lat},${item.lng}`;
+                n.target = "_blank";
+                n.innerText = "🚗 길찾기";
+                var rv = document.createElement('a');
+                rv.className = 'rv-btn';
+                rv.href = `https://map.kakao.com/link/roadview/${item.lat},${item.lng}`;
+                rv.target = "_blank";
+                rv.innerText = "👁️ 로드뷰";
+                g.append(n, rv);
+                itemDiv.append(g);
 
-                var d = document.createElement('button'); d.className = 'del-btn-iw'; d.innerText = '점검완료 및 삭제';
+                /* ─── 개별 삭제 버튼 ─── */
+                var d = document.createElement('button');
+                d.className = 'del-btn-iw';
+                d.innerText = '점검완료 및 삭제';
                 d.onclick = function() {
                     if (confirm('삭제하시겠습니까?')) {
                         currentSites = currentSites.filter(s => s.id !== item.id);
@@ -1076,31 +1422,51 @@
                         saveAndRender();
                     }
                 };
-                itemDiv.append(d); listArea.append(itemDiv);
+                itemDiv.append(d);
+                listArea.append(itemDiv);
             });
 
             container.appendChild(listArea);
 
-            var iwContent = document.createElement('div'); iwContent.style.cssText = 'position:absolute;bottom:45px;left:-125px;z-index:99;';
+            /* ─── 인포윈도우 위치(마커 위쪽으로 띄우기) ───
+               left:-125px → 가로 중앙 정렬 (container 너비 250px의 절반)
+               bottom:45px → 마커 위로 살짝 띄움 */
+            var iwContent = document.createElement('div');
+            iwContent.style.cssText = 'position:absolute;bottom:45px;left:-125px;z-index:99;';
             iwContent.appendChild(container);
 
             var iwOverlay = new kakao.maps.CustomOverlay({
-                content: iwContent, position: new kakao.maps.LatLng(first.lat, first.lng),
+                content: iwContent,
+                position: new kakao.maps.LatLng(first.lat, first.lng),
                 yAnchor: 1, zIndex: 99, clickable: true
             });
 
-            closeBtn.onclick = function(e) { e.stopPropagation(); iwOverlay.setMap(null); currentInfoWindow = null; };
+            // 닫기/열기 핸들러: 동시에 1개만 열리도록 currentInfoWindow 관리
+            closeBtn.onclick = function(e) {
+                e.stopPropagation();
+                iwOverlay.setMap(null);
+                currentInfoWindow = null;
+            };
             markerContent.onclick = function() {
                 if (currentInfoWindow) currentInfoWindow.setMap(null);
-                iwOverlay.setMap(map); currentInfoWindow = iwOverlay;
+                iwOverlay.setMap(map);
+                currentInfoWindow = iwOverlay;
             };
 
+            // 최종 마커 CustomOverlay (yAnchor:1 → 핀 끝이 좌표에 닿게)
             return new kakao.maps.CustomOverlay({
-                position: new kakao.maps.LatLng(first.lat, first.lng), content: markerContent, yAnchor: 1, _iwOverlay: iwOverlay
+                position: new kakao.maps.LatLng(first.lat, first.lng),
+                content: markerContent,
+                yAnchor: 1,
+                _iwOverlay: iwOverlay // 참조 보관(현재 별도 사용처는 없음)
             });
         });
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [전체 다시 그리기]
+       └ 클러스터러 클리어 → 필터 적용 → 재 add
+    ═══════════════════════════════════════════════════════════ */
     function drawMarkers() {
         clusterer.clear();
         standaloneMarkers.forEach(m => m.setMap(null));
@@ -1110,8 +1476,13 @@
         var filtered = getFilteredSites();
         var markers  = buildMarkerObjects(filtered);
 
-        if (isClusteringOn) clusterer.addMarkers(markers);
-        else { markers.forEach(m => m.setMap(map)); standaloneMarkers = markers; }
+        if (isClusteringOn) {
+            clusterer.addMarkers(markers);
+        } else {
+            // 클러스터링 OFF면 전부 그대로 띄우고, standaloneMarkers에 보관(다음 clear용)
+            markers.forEach(m => m.setMap(map));
+            standaloneMarkers = markers;
+        }
 
         var stText = `${currentSites.length}건 원본 중 ${filtered.length}건 표출`;
         if (quickSearchKeyword) stText += " (검색결과)";
@@ -1119,16 +1490,20 @@
         renderFailedListUI();
     }
 
+    /** 데이터 영속화 + (옵션) 재렌더링 */
     function saveAndRender(reDraw = true) {
         try { localStorage.setItem('kesco_map_data', JSON.stringify(currentSites)); } catch(e) {}
         if (reDraw) drawMarkers();
     }
 
+    /* ═══════════════════════════════════════════════════════════
+       [전체 초기화] 데이터 + 설정 모두 삭제 후 새로고침
+    ═══════════════════════════════════════════════════════════ */
     document.getElementById('clear-btn').onclick = function() {
-        if (confirm("모든 데이터를 삭제하시겠습니까?")) { 
+        if (confirm("모든 데이터를 삭제하시겠습니까?")) {
             localStorage.removeItem('kesco_map_data');
-            localStorage.removeItem('kesco_settings'); // 설정값도 함께 초기화
-            location.reload(); 
+            localStorage.removeItem('kesco_settings');
+            location.reload();
         }
     };
 </script>
