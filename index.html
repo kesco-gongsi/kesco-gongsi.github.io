@@ -114,6 +114,8 @@
 
         /* 내 위치 마커 (원 + 방향 화살표) */
         .my-location-marker { position: relative; width: 50px; height: 50px; pointer-events: none; }
+        /* 내 위치·선택 표시가 겹쳐도 점검 대상 핀이 클릭되도록 지도 SDK가 만든 감싸는 상자까지 클릭을 통과시킨다 */
+        div:has(> .my-location-marker), div:has(> .selected-ring) { pointer-events: none !important; }
         .direction-arrow { position: absolute; top: 0; left: 15px; width: 20px; height: 25px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23EF4444'%3E%3Cpath d='M12 2L22 20L12 17L2 20L12 2Z'/%3E%3C/svg%3E"); background-size: contain; background-repeat: no-repeat; transform-origin: center bottom; z-index: 2; transition: transform 0.1s; }
         .location-dot { position: absolute; top: 15px; left: 15px; width: 20px; height: 20px; background: var(--blue); border: 3px solid #fff; border-radius: 50%; z-index: 3; }
 
@@ -632,7 +634,7 @@
         c.className = 'my-location-marker';
         c.innerHTML = '<div id="direction-arrow" class="direction-arrow" style="display:none;"></div><div class="location-dot"></div>';
         myLocMarker = new kakao.maps.CustomOverlay({
-            position: loc, content: c, xAnchor: 0.5, yAnchor: 0.5, zIndex: 10
+            position: loc, content: c, xAnchor: 0.5, yAnchor: 0.5, zIndex: 0
         });
         myLocMarker.setMap(map);
     }
@@ -1165,6 +1167,7 @@
                 position: new kakao.maps.LatLng(first.lat, first.lng),
                 content: markerContent,
                 yAnchor: 1,
+                zIndex: 1,     // 내 위치 표시(0)보다 위
                 clickable: true
             });
         });
