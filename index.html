@@ -75,6 +75,8 @@
         .chip[aria-pressed="true"] { background: var(--blue-100); border-color: var(--blue-100); color: var(--blue-ink); }
 
         .summary { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 16px; background: var(--ground); color: var(--muted); font-size: 13px; }
+        .sort-ctl { flex: none; display: flex; gap: 4px; }
+        #sortDir { min-height: 32px; padding: 0 8px; font-size: 13px; white-space: nowrap; }
         .summary select { flex: none; height: 32px; padding: 0 6px; border: 1px solid var(--control); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: 500 13px var(--font); cursor: pointer; }
         .summary b { color: var(--text); font-weight: 600; }
 
@@ -183,6 +185,7 @@
             .head .settings { min-height: 44px; }
             .chip { height: 36px; }
             .summary select { height: 40px; }
+            #sortDir { min-height: 40px; }
             #mapWrap { grid-row: 2; }
             #card { grid-row: 3; position: static; width: auto; max-height: 45dvh; border: 0; border-radius: 0; padding: 12px 16px; border-top: 1px solid var(--border); }
             #peek { grid-row: 4; display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 48px; padding: 0 16px; margin: 0; border: 0; border-top: 1px solid var(--border); background: var(--surface); font-weight: 500; box-sizing: content-box; width: calc(100% - 32px); padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -220,12 +223,15 @@
                 <div class="list-head"><span id="listTitle"></span><button class="x" id="closeList" aria-label="목록 닫기">×</button></div>
                 <div class="summary">
                     <span id="sumL" class="num"></span>
-                    <select id="sortSel" aria-label="목록 정렬">
-                        <option value="default" id="sortDefault">파일 순서</option>
-                        <option value="address">주소별</option>
-                        <option value="pole">인입주별</option>
-                        <option value="title">상호별</option>
-                    </select>
+                    <span class="sort-ctl">
+                        <select id="sortSel" aria-label="목록 정렬">
+                            <option value="default" id="sortDefault">파일 순서</option>
+                            <option value="address">주소별</option>
+                            <option value="pole">인입주별</option>
+                            <option value="title">상호별</option>
+                        </select>
+                        <button class="btn" id="sortDir"></button>
+                    </span>
                 </div>
                 <ul id="list"></ul>
                 <button id="failBtn" hidden></button>
@@ -325,6 +331,7 @@
     var absentFilter = 'all';            // 'all' | 'yes' | 'no'
     var searchTypeFilter = 'mixed';      // 'mixed' | 'address' | 'pole'
     var sortMode = 'default';            // 'default'(가까운 순/파일 순서) | 'address' | 'pole' | 'title'
+    var sortDesc = false;                // true면 내림차순
     var quickSearchKeyword = "";         // 부분 일치 키워드
     var pendingMarkerCoord = null;       // 모달 확정 전 임시 좌표
     var selectedKey = null;              // 선택한 위치의 좌표 키
@@ -372,7 +379,7 @@
         var settings = {
             isClusteringOn, isLabelOn, isDistrictOn,
             mapTypeId: currentMapTypeId,
-            absentFilter, searchTypeFilter, sortMode,
+            absentFilter, searchTypeFilter, sortMode, sortDesc,
             activeColorFilters: Array.from(activeColorFilters)
         };
         localStorage.setItem('kesco_settings', JSON.stringify(settings));
@@ -390,6 +397,7 @@
             absentFilter     = s.absentFilter     ?? absentFilter;
             searchTypeFilter = s.searchTypeFilter ?? searchTypeFilter;
             sortMode         = s.sortMode         ?? sortMode;
+            sortDesc         = s.sortDesc         ?? sortDesc;
             if (s.activeColorFilters) activeColorFilters = new Set(s.activeColorFilters);
         }
         $('optCluster').checked = isClusteringOn;
@@ -1173,19 +1181,28 @@
     }
 
     function sortRows(rows) {
+        var dir = sortDesc ? -1 : 1;
         if (sortMode === 'default') {
-            if (rows.length && rows[0].km != null) rows.sort((a, b) => a.km - b.km);
+            if (rows.length && rows[0].km != null) rows.sort((a, b) => (a.km - b.km) * dir);
+            else if (sortDesc) rows.reverse();
             return;
         }
         rows.sort(function(a, b) {
             var x = sortText(a.site), y = sortText(b.site);
             if (!x !== !y) return x ? -1 : 1;
-            return x.localeCompare(y, 'ko', { numeric: true, sensitivity: 'base' });
+            return x.localeCompare(y, 'ko', { numeric: true, sensitivity: 'base' }) * dir;
         });
     }
 
     $('sortSel').onchange = function() {
         sortMode = this.value;
+        saveSettings();
+        renderPanel(getFilteredSites());
+        $('list').scrollTop = 0;
+    };
+
+    $('sortDir').onclick = function() {
+        sortDesc = !sortDesc;
         saveSettings();
         renderPanel(getFilteredSites());
         $('list').scrollTop = 0;
@@ -1232,6 +1249,7 @@
         sumL.textContent = '표시 ';
         sumL.append(el('b', 'num', filtered.length + '건'), ' · 전체 ' + currentSites.length + '건 · 부재 ' + absentN + '건');
         $('sortDefault').textContent = me ? '가까운 순' : '파일 순서';
+        $('sortDir').textContent = sortDesc ? '↓ 내림차순' : '↑ 오름차순';
         $('listTitle').textContent = '목록 ' + filtered.length + '건';
         $('peekL').textContent = '표시 ' + filtered.length + '건 · 부재 ' + absentN + '건';
     }
