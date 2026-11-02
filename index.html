@@ -74,7 +74,8 @@
         .chip:hover { background: var(--raised); }
         .chip[aria-pressed="true"] { background: var(--blue-100); border-color: var(--blue-100); color: var(--blue-ink); }
 
-        .summary { display: flex; justify-content: space-between; gap: 8px; padding: 8px 16px; background: var(--ground); color: var(--muted); font-size: 13px; }
+        .summary { flex: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 16px; background: var(--ground); color: var(--muted); font-size: 13px; }
+        .summary select { flex: none; height: 32px; padding: 0 6px; border: 1px solid var(--control); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: 500 13px var(--font); cursor: pointer; }
         .summary b { color: var(--text); font-weight: 600; }
 
         #listWrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -181,7 +182,7 @@
             .head { padding: 8px 16px; }
             .head .settings { min-height: 44px; }
             .chip { height: 36px; }
-            .summary { display: none; }
+            .summary select { height: 40px; }
             #mapWrap { grid-row: 2; }
             #card { grid-row: 3; position: static; width: auto; max-height: 45dvh; border: 0; border-radius: 0; padding: 12px 16px; border-top: 1px solid var(--border); }
             #peek { grid-row: 4; display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 48px; padding: 0 16px; margin: 0; border: 0; border-top: 1px solid var(--border); background: var(--surface); font-weight: 500; box-sizing: content-box; width: calc(100% - 32px); padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -215,9 +216,17 @@
                 </form>
                 <div class="chips" id="chips"></div>
             </div>
-            <div class="summary"><span id="sumL"></span><span id="sumR" class="num"></span></div>
             <div id="listWrap">
                 <div class="list-head"><span id="listTitle"></span><button class="x" id="closeList" aria-label="목록 닫기">×</button></div>
+                <div class="summary">
+                    <span id="sumL" class="num"></span>
+                    <select id="sortSel" aria-label="목록 정렬">
+                        <option value="default" id="sortDefault">파일 순서</option>
+                        <option value="address">주소별</option>
+                        <option value="pole">인입주별</option>
+                        <option value="title">상호별</option>
+                    </select>
+                </div>
                 <ul id="list"></ul>
                 <button id="failBtn" hidden></button>
             </div>
@@ -315,6 +324,7 @@
     var activeColorFilters = new Set([1,2,3,4,5,6,7,8,9,10]); // 보일 색상 코드
     var absentFilter = 'all';            // 'all' | 'yes' | 'no'
     var searchTypeFilter = 'mixed';      // 'mixed' | 'address' | 'pole'
+    var sortMode = 'default';            // 'default'(가까운 순/파일 순서) | 'address' | 'pole' | 'title'
     var quickSearchKeyword = "";         // 부분 일치 키워드
     var pendingMarkerCoord = null;       // 모달 확정 전 임시 좌표
     var selectedKey = null;              // 선택한 위치의 좌표 키
@@ -362,7 +372,7 @@
         var settings = {
             isClusteringOn, isLabelOn, isDistrictOn,
             mapTypeId: currentMapTypeId,
-            absentFilter, searchTypeFilter,
+            absentFilter, searchTypeFilter, sortMode,
             activeColorFilters: Array.from(activeColorFilters)
         };
         localStorage.setItem('kesco_settings', JSON.stringify(settings));
@@ -379,10 +389,12 @@
             currentMapTypeId = s.mapTypeId        ?? currentMapTypeId;
             absentFilter     = s.absentFilter     ?? absentFilter;
             searchTypeFilter = s.searchTypeFilter ?? searchTypeFilter;
+            sortMode         = s.sortMode         ?? sortMode;
             if (s.activeColorFilters) activeColorFilters = new Set(s.activeColorFilters);
         }
         $('optCluster').checked = isClusteringOn;
         $('optLabel').checked   = isLabelOn;
+        $('sortSel').value      = sortMode;
         buildColorChips();
 
         map.setMapTypeId(currentMapTypeId === 'roadmap' ? kakao.maps.MapTypeId.ROADMAP : kakao.maps.MapTypeId.HYBRID);
@@ -1153,10 +1165,36 @@
     /* ═══════════════════════════════════════════════════════════
        [목록·요약] 내 위치가 있으면 가까운 순, 없으면 파일 순서
     ═══════════════════════════════════════════════════════════ */
+    /** 정렬 기준 글자 (없으면 빈 값 → 맨 뒤로) */
+    function sortText(s) {
+        if (sortMode === 'address') return s.addr || s.addrText || '';
+        if (sortMode === 'pole')    return s.poleNum || '';
+        return s.title || '';
+    }
+
+    function sortRows(rows) {
+        if (sortMode === 'default') {
+            if (rows.length && rows[0].km != null) rows.sort((a, b) => a.km - b.km);
+            return;
+        }
+        rows.sort(function(a, b) {
+            var x = sortText(a.site), y = sortText(b.site);
+            if (!x !== !y) return x ? -1 : 1;
+            return x.localeCompare(y, 'ko', { numeric: true, sensitivity: 'base' });
+        });
+    }
+
+    $('sortSel').onchange = function() {
+        sortMode = this.value;
+        saveSettings();
+        renderPanel(getFilteredSites());
+        $('list').scrollTop = 0;
+    };
+
     function renderPanel(filtered) {
         var me = getMyCoord();
         var rows = filtered.map(s => ({ site: s, km: me ? getDistance(me.lat, me.lng, s.lat, s.lng) : null }));
-        if (me) rows.sort((a, b) => a.km - b.km);
+        sortRows(rows);
 
         var ul = $('list');
         var scroll = ul.scrollTop;
@@ -1192,9 +1230,9 @@
         var absentN = filtered.filter(s => s.isAbsent).length;
         var sumL = $('sumL');
         sumL.textContent = '표시 ';
-        sumL.append(el('b', 'num', filtered.length + '건'), me ? ' · 내 위치에서 가까운 순' : ' · 파일 순서');
-        $('sumR').textContent = '전체 ' + currentSites.length + '건 · 부재 ' + absentN + '건';
-        $('listTitle').textContent = (me ? '가까운 순 ' : '목록 ') + filtered.length + '건';
+        sumL.append(el('b', 'num', filtered.length + '건'), ' · 전체 ' + currentSites.length + '건 · 부재 ' + absentN + '건');
+        $('sortDefault').textContent = me ? '가까운 순' : '파일 순서';
+        $('listTitle').textContent = '목록 ' + filtered.length + '건';
         $('peekL').textContent = '표시 ' + filtered.length + '건 · 부재 ' + absentN + '건';
     }
 
