@@ -1478,6 +1478,9 @@
     ═══════════════════════════════════════════════════════════ */
     function renderCard() {
         var card  = $('card');
+        // 메모 입력 중에는 다시 그리지 않는다 (내 위치가 갱신될 때마다 입력칸이 새로 만들어져 자판이 내려갔다)
+        var typing = document.activeElement;
+        if (editingMemoId && typing && typing.tagName === 'TEXTAREA' && card.contains(typing)) return;
         var group = selectedKey ? getFilteredSites().filter(s => coordKey(s.lat, s.lng) === selectedKey) : [];
         card.textContent = '';
         card.hidden = !group.length;
