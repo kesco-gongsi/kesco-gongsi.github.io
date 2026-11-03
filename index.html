@@ -126,6 +126,27 @@
         #longpress-ripple { position: fixed; width: 60px; height: 60px; border-radius: 50%; background: rgba(0,85,170,0.2); border: 2px solid rgba(0,85,170,0.45); transform: translate(-50%,-50%) scale(0); pointer-events: none; z-index: 1000; transition: transform 0.6s ease-out, opacity 0.6s ease-out; opacity: 0; }
         #longpress-ripple.active { transform: translate(-50%,-50%) scale(1); opacity: 1; }
 
+        /* 꾹 누르기(우클릭) 선택 말풍선과 누른 자리 표시 */
+        #pressDot { position: fixed; z-index: 2400; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; background: var(--blue); border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); pointer-events: none; }
+        #pressMenu { position: fixed; z-index: 2500; width: 232px; display: flex; flex-direction: column; align-items: center; }
+        #pressMenu.wide { width: min(320px, calc(100vw - 24px)); }
+        #pressMenu.below { flex-direction: column-reverse; }
+        .pm-choice { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 18px rgba(10, 30, 60, .22); }
+        .pm-choice button { min-height: 44px; border: 0; border-radius: 10px; background: var(--raised); font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .pm-choice button svg { color: var(--muted); }
+        .pm-choice .go { background: var(--blue); color: #fff; font-weight: 700; }
+        .pm-choice .go svg { color: #fff; }
+        .pm-addr { width: 100%; padding: 12px 10px 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 18px rgba(10, 30, 60, .22); }
+        .pm-addr-top { display: flex; align-items: flex-start; gap: 8px; }
+        .pm-addr-top b { flex: 1; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+        .pm-addr-top .x { margin: -6px -4px 0 0; }
+        .pm-addr-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+        .pm-tail { width: 12px; height: 12px; margin-top: -7px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); transform: rotate(45deg); }
+        #pressMenu.below .pm-tail { margin: 0 0 -7px; transform: rotate(225deg); }
+        /* 핀 추가 입력: 화면 가운데 큰 창 대신 누른 자리 근처에 뜬다 */
+        #custom-modal.pop { position: fixed; margin: 0; right: auto; bottom: auto; width: min(320px, calc(100vw - 24px)); padding: 14px; z-index: 2500; }
+        #custom-modal.pop h2 { font-size: 16px; margin-bottom: 10px; }
+
         /* ───── 선택 카드: 데스크톱은 지도 위에 뜬다 ───── */
         #card { position: absolute; left: 396px; bottom: 44px; width: 340px; max-height: calc(100dvh - 100px); overflow-y: auto; background: var(--surface); border: 1px solid var(--control); border-radius: var(--r-card); padding: 14px 16px 16px; z-index: 200; }
         #card[hidden] { display: none; }
@@ -145,7 +166,8 @@
         .absent input { width: 18px; height: 18px; accent-color: var(--blue); margin: 0; }
         .acts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 4px; }
         .acts .btn { min-height: 44px; padding: 0 6px; }
-        .bulk { width: 100%; margin-top: 10px; }
+        /* 같은 위치 여러 건: 카드 머리에서 바로 닿도록 */
+        .card-top .bulk { flex: none; min-height: 36px; margin: -4px 0 0; padding: 0 10px; border-color: #f2c9c6; background: var(--negative-bg); color: var(--negative-ink); font-size: 13px; }
 
         #peek { display: none; }
         .settings .ph, .filter-btn { display: none; }
@@ -206,9 +228,15 @@
             #sortDir { min-height: 40px; }
             #mapWrap { grid-row: 1; }
             #card { grid-row: 2; position: static; width: auto; max-height: 45dvh; border: 0; border-radius: 0; padding: 12px 16px; border-top: 1px solid var(--border); }
-            /* 건수 줄은 지도 위에 뜨고, 아래쪽 지도 로고·축척은 가리지 않게 띄운다. 선택 카드가 열리면 숨긴다 */
-            #peek { position: absolute; z-index: 250; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 30px); display: flex; justify-content: space-between; align-items: center; min-height: 48px; padding: 0 18px; margin: 0; border: 0; border-radius: 24px; background: var(--surface); box-shadow: 0 2px 10px rgba(10, 30, 60, .22); font-weight: 500; }
-            #card:not([hidden]) ~ #peek { display: none; }
+            /* 건수·목록 보기는 메뉴(☰) 안에 둔다 */
+            #peek { display: none; }
+            body.menu-open #top { border-radius: 18px; }
+            body.menu-open #openSettings { background: var(--blue-100); }
+            .phone-menu { grid-column: 1 / -1; display: flex; flex-direction: column; margin: 6px 6px 2px; border-top: 1px solid var(--rule); }
+            .pm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 50px; padding: 0 6px; border: 0; border-bottom: 1px solid var(--rule); background: none; text-align: left; font-size: 15px; }
+            .pm-row:last-child { border-bottom: 0; }
+            .pm-row b { color: var(--blue); font-size: 14px; font-weight: 600; }
+            .pm-fail { color: var(--negative); }
             #peek span:last-child { color: var(--blue); }
             #listWrap { position: fixed; left: 0; right: 0; bottom: 0; height: 70dvh; background: var(--surface); border-radius: 12px 12px 0 0; box-shadow: 0 -8px 30px rgba(10, 30, 60, .2); z-index: 500; display: none; }
             body.list-open #listWrap { display: flex; }
@@ -218,8 +246,8 @@
             .layers { top: calc(env(safe-area-inset-top, 0px) + 68px); right: 10px; flex-direction: column; border: 0; border-radius: 10px; box-shadow: 0 2px 10px rgba(10, 30, 60, .22); }
             .layers button { min-height: 40px; min-width: 48px; padding: 0 8px; font-size: 12px; }
             .layers button + button { border-left: 0; border-top: 1px solid var(--border); }
-            #my-loc-fab { bottom: calc(env(safe-area-inset-bottom, 0px) + 92px); border: 0; box-shadow: 0 2px 10px rgba(10, 30, 60, .22); color: var(--blue); }
-            #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 90px); width: calc(100vw - 32px); justify-content: space-between; }
+            #my-loc-fab { bottom: calc(env(safe-area-inset-bottom, 0px) + 36px); border: 0; box-shadow: 0 2px 10px rgba(10, 30, 60, .22); color: var(--blue); }
+            #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); width: calc(100vw - 32px); justify-content: space-between; }
         }
         @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
@@ -241,6 +269,11 @@
                 </form>
                 <button class="filter-btn" id="filterBtn" aria-label="표시 방식·부재 필터" aria-expanded="false" aria-controls="chips"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
                 <div class="chips" id="chips"></div>
+                <div class="phone-menu" id="phoneMenu" hidden>
+                    <button class="pm-row" id="pmList"><span id="pmCount" class="num"></span><b>목록 보기</b></button>
+                    <button class="pm-row" id="pmSettings">표시·파일 설정</button>
+                    <button class="pm-row pm-fail" id="pmFail" hidden></button>
+                </div>
             </div>
             <div id="listWrap">
                 <div class="list-head"><span id="listTitle"></span><button class="x" id="closeList" aria-label="목록 닫기">×</button></div>
@@ -274,6 +307,18 @@
     </div>
 
     <div id="longpress-ripple"></div>
+    <div id="pressDot" hidden></div>
+    <div id="pressMenu" hidden>
+        <div class="pm-choice" id="pmChoice">
+            <button id="pmShowAddr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>주소 보기</button>
+            <button id="pmAddPin" class="go"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>핀 추가</button>
+        </div>
+        <div class="pm-addr" id="pmAddrBox" hidden>
+            <div class="pm-addr-top"><b id="pmAddrText"></b><button class="x" id="pmClose" aria-label="닫기">×</button></div>
+            <div class="pm-addr-acts"><button class="btn" id="pmCopy">주소 복사</button><button class="btn primary" id="pmAddHere">여기 핀 추가</button></div>
+        </div>
+        <span class="pm-tail"></span>
+    </div>
     <div id="toast" role="status" hidden><span id="toastMsg"></span><button id="toastUndo" hidden>되돌리기</button></div>
 
     <!-- 표시·파일 설정 -->
@@ -594,6 +639,8 @@
         var fails = getFailedSites();
         $('failBtn').hidden = !fails.length;
         $('failBtn').textContent = '주소 변환 실패 ' + fails.length + '건 확인';
+        $('pmFail').hidden = !fails.length;
+        $('pmFail').textContent = '주소 변환 실패 ' + fails.length + '건';
     }
 
     $('failBtn').onclick = function() {
@@ -758,17 +805,101 @@
     /* ═══════════════════════════════════════════════════════════
        [수동 마커 추가] 모달 → 좌표→주소 역지오코딩 → 등록
     ═══════════════════════════════════════════════════════════ */
+    // 좌표 → 주소 역변환 (도로명 우선, 없으면 지번). 찾지 못하면 null
+    function reverseAddress(latLng, done) {
+        geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
+            var addr = null;
+            if (status === kakao.maps.services.Status.OK) {
+                addr = result[0].road_address ? result[0].road_address.address_name : result[0].address.address_name;
+            }
+            done(addr);
+        });
+    }
+
     function addManualMarker(latLng) {
         pendingMarkerCoord = latLng;
+        openPressMenu();
+    }
+
+    /* ─── 선택 말풍선: 누른 자리 위에 뜨고, 다른 곳을 누르면 닫힌다 ─── */
+    var lastPt = { x: innerWidth / 2, y: innerHeight / 2 };
+    ['pointerdown', 'contextmenu'].forEach(function(type) {
+        document.addEventListener(type, function(e) {
+            if ($('pressMenu').contains(e.target) || $('custom-modal').contains(e.target)) return;
+            lastPt = { x: e.clientX, y: e.clientY };
+            if (type === 'pointerdown' && !$('pressMenu').hidden) closePressMenu();
+        }, true);
+    });
+
+    function openPressMenu() {
+        var m = $('pressMenu');
+        $('pmChoice').hidden = false;
+        $('pmAddrBox').hidden = true;
+        m.classList.remove('wide');
+        m.hidden = false;
+        $('pressDot').style.left = lastPt.x + 'px';
+        $('pressDot').style.top  = lastPt.y + 'px';
+        $('pressDot').hidden = false;
+        positionPressMenu();
+    }
+    function positionPressMenu() {
+        var m = $('pressMenu'), w = m.offsetWidth, h = m.offsetHeight;
+        var left  = Math.min(Math.max(lastPt.x - w / 2, 12), innerWidth - w - 12);
+        var below = lastPt.y - h - 14 < 64;   // 위 검색줄에 가리면 아래에 띄운다
+        m.classList.toggle('below', below);
+        m.style.left = left + 'px';
+        m.style.top  = (below ? lastPt.y + 14 : lastPt.y - h - 14) + 'px';
+        m.querySelector('.pm-tail').style.translate = (lastPt.x - left - w / 2) + 'px 0';
+    }
+    function closePressMenu() {
+        $('pressMenu').hidden = true;
+        if (!$('custom-modal').open) $('pressDot').hidden = true;
+    }
+
+    $('pmShowAddr').onclick = function() {
+        $('pmChoice').hidden = true;
+        $('pmAddrBox').hidden = false;
+        $('pressMenu').classList.add('wide');
+        $('pmAddrText').textContent = '주소를 찾는 중…';
+        $('pmCopy').disabled = true;
+        positionPressMenu();
+        var coord = pendingMarkerCoord;
+        reverseAddress(coord, function(addr) {
+            if (coord !== pendingMarkerCoord) return;
+            $('pmAddrText').textContent = addr || '이 위치의 주소를 찾지 못했습니다.';
+            $('pmCopy').disabled = !addr;
+            positionPressMenu();
+        });
+    };
+    $('pmCopy').onclick = function() {
+        var text = $('pmAddrText').textContent;
+        if (!navigator.clipboard) { toast('이 브라우저는 복사를 지원하지 않습니다.'); return; }
+        navigator.clipboard.writeText(text).then(
+            function() { toast('주소를 복사했습니다.'); },
+            function() { toast('주소를 복사하지 못했습니다.'); });
+    };
+    $('pmClose').onclick = function() { closePressMenu(); pendingMarkerCoord = null; };
+    $('pmAddPin').onclick = $('pmAddHere').onclick = openAddForm;
+
+    function openAddForm() {
+        $('pressMenu').hidden = true;
         $('modal-input-title').value = '';
         $('modal-input-memo').value  = '';
         $('addErr').hidden = true;
-        $('custom-modal').showModal();
+        var d = $('custom-modal');
+        d.classList.add('pop');
+        d.show();
+        var w = d.offsetWidth, h = d.offsetHeight;
+        // 휴대폰 자판이 올라와도 가리지 않도록 화면 위쪽 절반 안에 둔다
+        var maxTop = Math.max(64, innerHeight * 0.5 - h);
+        d.style.left = Math.min(Math.max(lastPt.x - w / 2, 12), innerWidth - w - 12) + 'px';
+        d.style.top  = Math.min(Math.max(lastPt.y - h - 18, 64), maxTop) + 'px';
         $('modal-input-title').focus();
     }
 
     $('addCancel').onclick = function() {
         $('custom-modal').close();
+        $('pressDot').hidden = true;
         pendingMarkerCoord = null;
     };
 
@@ -783,14 +914,11 @@
         }
 
         $('custom-modal').close();
+        $('pressDot').hidden = true;
         var latLng = pendingMarkerCoord;
 
-        // 좌표를 주소로 역변환 (도로명 우선, 없으면 지번)
-        geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
-            var addrStr = "수동 등록 지점";
-            if (status === kakao.maps.services.Status.OK) {
-                addrStr = result[0].road_address ? result[0].road_address.address_name : result[0].address.address_name;
-            }
+        reverseAddress(latLng, function(addr) {
+            var addrStr = addr || "수동 등록 지점";
             currentSites.push({
                 id: crypto.randomUUID(),
                 title: title,
@@ -1277,6 +1405,7 @@
         $('sortDir').textContent = sortDesc ? '↓ 내림차순' : '↑ 오름차순';
         $('listTitle').textContent = '목록 ' + filtered.length + '건';
         $('peekL').textContent = '표시 ' + filtered.length + '건 · 부재 ' + absentN + '건';
+        $('pmCount').textContent = $('peekL').textContent;
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -1350,7 +1479,13 @@
         var close = el('button', 'x', '×');
         close.setAttribute('aria-label', '닫기');
         close.onclick = function() { selectLocation(null); };
-        top.append(el('h2', '', titleText), close);
+        top.append(el('h2', '', titleText));
+        if (group.length > 1) {
+            var bulk = el('button', 'btn bulk', group.length + '건 모두 완료');
+            bulk.onclick = function() { removeSites(new Set(group.map(g => g.id)), `이 위치 ${group.length}건을 삭제했습니다.`); };
+            top.append(bulk);
+        }
+        top.append(close);
         card.append(top);
 
         group.forEach(function(item) {
@@ -1410,12 +1545,6 @@
             card.append(box);
         });
 
-        // 같은 위치 일괄 삭제
-        if (group.length > 1) {
-            var bulk = el('button', 'btn danger bulk', `이 위치 ${group.length}건 전체 삭제`);
-            bulk.onclick = function() { removeSites(new Set(group.map(g => g.id)), `이 위치 ${group.length}건을 삭제했습니다.`); };
-            card.append(bulk);
-        }
     }
 
     /* ═══════════════════════════════════════════════════════════
@@ -1460,11 +1589,30 @@
         $('fileErr').hidden = true;
         $('dlgSettings').showModal();
     }
-    $('openSettings').onclick  = openSettings;
-    $('filterBtn').onclick = function() {
-        var open = document.body.classList.toggle('filters-open');
-        this.setAttribute('aria-expanded', open);
+    function isPhone() { return matchMedia('(max-width: 900px)').matches; }
+    function setPhoneMenu(open) {
+        $('phoneMenu').hidden = !open;
+        document.body.classList.toggle('menu-open', open);
+        $('openSettings').setAttribute('aria-expanded', open);
+    }
+    function setFilters(open) {
+        document.body.classList.toggle('filters-open', open);
+        $('filterBtn').setAttribute('aria-expanded', open);
+    }
+    $('openSettings').onclick = function() {
+        if (!isPhone()) { openSettings(); return; }
+        var open = $('phoneMenu').hidden;
+        setPhoneMenu(open);
+        if (open) setFilters(false);
     };
+    $('filterBtn').onclick = function() {
+        var open = !document.body.classList.contains('filters-open');
+        setFilters(open);
+        if (open) setPhoneMenu(false);
+    };
+    $('pmList').onclick     = function() { setPhoneMenu(false); document.body.classList.add('list-open'); };
+    $('pmSettings').onclick = function() { setPhoneMenu(false); openSettings(); };
+    $('pmFail').onclick     = function() { setPhoneMenu(false); $('failBtn').click(); };
     $('closeSettings').onclick = function() { $('dlgSettings').close(); };
     $('peek').onclick      = function() { document.body.classList.add('list-open'); };
     $('closeList').onclick = function() { document.body.classList.remove('list-open'); };
