@@ -943,11 +943,13 @@
     ═══════════════════════════════════════════════════════════ */
     function isPoleQuery(v) { return /^[0-9A-Za-z]{8}$/.test(v) && /[0-9]/.test(v); }
 
+    var searchTimer;
     $('q').addEventListener('input', function() {
         var v = this.value.trim(), pole = isPoleQuery(v);
         $('poleGo').hidden = !pole;
         quickSearchKeyword = pole ? "" : v.toLowerCase();
-        drawMarkers();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(drawMarkers, 150);
     });
 
     $('searchForm').addEventListener('submit', function(ev) {
@@ -1204,8 +1206,8 @@
             var isFirst = !myLocMarker;
             ensureMyLocMarker(loc);
             if (isFirst) map.setCenter(loc); // 처음 잡힐 때만 카메라 이동
-            renderPanel(getFilteredSites());  // 거리·순서 갱신
-            renderCard();
+            if (!isPhone() || document.body.classList.contains('list-open')) renderPanel(getFilteredSites());
+            updateCardDistances();
         }, function() {
             toast("위치 정보를 가져올 수 없습니다. 권한을 확인해 주세요.");
             stopTracking();
@@ -1371,14 +1373,12 @@
 
     function renderPanel(filtered) {
         var me = getMyCoord();
-        var rows = filtered.map(s => ({ site: s, km: me ? getDistance(me.lat, me.lng, s.lat, s.lng) : null }));
-        sortRows(rows);
-
         var ul = $('list');
         var listShown = !isPhone() || document.body.classList.contains('list-open');
+        var rows = listShown ? filtered.map(s => ({ site: s, km: me ? getDistance(me.lat, me.lng, s.lat, s.lng) : null })) : [];
+        if (listShown) sortRows(rows);
         var scroll = ul.scrollTop;
         ul.textContent = '';
-        if (!listShown) rows = [];
 
         if (listShown && !rows.length) {
             var li = el('li', 'empty');
@@ -1476,11 +1476,17 @@
     /* ═══════════════════════════════════════════════════════════
        [선택 카드] 같은 위치의 사이트를 모두 나열
     ═══════════════════════════════════════════════════════════ */
+    function updateCardDistances() {
+        var me = getMyCoord();
+        $('card').querySelectorAll('[data-distance]').forEach(function(label) {
+            label.textContent = me ? ' · ' + formatDistance(getDistance(me.lat, me.lng, Number(label.dataset.lat), Number(label.dataset.lng))) : '';
+        });
+    }
+
     function renderCard() {
-        var card  = $('card');
-        // 메모 입력 중에는 다시 그리지 않는다 (내 위치가 갱신될 때마다 입력칸이 새로 만들어져 자판이 내려갔다)
-        var typing = document.activeElement;
-        if (editingMemoId && typing && typing.tagName === 'TEXTAREA' && card.contains(typing)) return;
+        var card = $('card');
+        var editor = card.querySelector('textarea');
+        if (editingMemoId && editor && editor.dataset.memoId === String(editingMemoId)) return;
         var group = selectedKey ? getFilteredSites().filter(s => coordKey(s.lat, s.lng) === selectedKey) : [];
         card.textContent = '';
         card.hidden = !group.length;
@@ -1505,7 +1511,13 @@
             var box = el('div', 'item');
             if (group.length > 1) box.append(el('h3', '', item.title));
             var distText = me ? ' · ' + formatDistance(getDistance(me.lat, me.lng, item.lat, item.lng)) : '';
-            box.append(el('div', 'meta', (item.addr || '') + distText));
+            var address = el('div', 'meta', item.addr || '');
+            var distance = el('span', '', distText);
+            distance.dataset.distance = '';
+            distance.dataset.lat = item.lat;
+            distance.dataset.lng = item.lng;
+            address.append(distance);
+            box.append(address);
             if (item.poleNum) {
                 var p = el('div', 'meta');
                 p.append('인입주 ', el('b', 'num', item.poleNum));
@@ -1515,6 +1527,7 @@
             /* ─── 메모 표시/편집 ─── */
             if (editingMemoId === item.id) {
                 var ta = el('textarea');
+                ta.dataset.memoId = String(item.id);
                 ta.value = item.memo || '';
                 ta.setAttribute('aria-label', '메모');
                 var save = el('button', 'btn tint memo-save', '메모 저장');
