@@ -264,7 +264,7 @@
                 </div>
                 <form class="search" id="searchForm" role="search">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="m11 11 4 4"/></svg>
-                    <input id="q" type="search" placeholder="인입주 번호 8자리, 상호, 주소" aria-label="인입주 번호, 상호, 주소 검색" autocomplete="off" enterkeyhint="search">
+                    <input id="q" type="search" placeholder="인입주 번호 8자리, 좌표, 상호, 주소" aria-label="인입주 번호, 좌표, 상호, 주소 검색" autocomplete="off" enterkeyhint="search">
                     <button class="btn tint" id="poleGo" hidden>조회</button>
                 </form>
                 <button class="filter-btn" id="filterBtn" aria-label="표시 방식·부재 필터" aria-expanded="false" aria-controls="chips"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg></button>
@@ -945,7 +945,7 @@
 
     var searchTimer;
     $('q').addEventListener('input', function() {
-        var v = this.value.trim(), pole = isPoleQuery(v);
+        var v = this.value.trim(), pole = isPoleQuery(v) || !!parseCoordQuery(v);
         $('poleGo').hidden = !pole;
         quickSearchKeyword = pole ? "" : v.toLowerCase();
         clearTimeout(searchTimer);
@@ -956,6 +956,7 @@
         ev.preventDefault();
         var v = $('q').value.trim();
         if (isPoleQuery(v)) searchPole(v.toUpperCase());
+        else if (parseCoordQuery(v)) searchCoord(parseCoordQuery(v));
         else this.querySelector('input').blur();
     });
 
@@ -965,9 +966,75 @@
        └ 없으면 4자리 prefix CSV 다운로드 후 추가
        └ 동일 번호 다중 결과면 참조 좌표 기준 최단거리 1건만 채택
     ═══════════════════════════════════════════════════════════ */
+    /** 단일 조회한 자리는 색상·부재·조회 방식 필터와 상관없이 보이게 한다 */
+    function revealSite(s) {
+        activeColorFilters.add(s.colorCode || 1);
+        if ((absentFilter === 'yes' && !s.isAbsent) || (absentFilter === 'no' && s.isAbsent)) absentFilter = 'all';
+        if ((searchTypeFilter === 'address' && !s.addrLatLng) || (searchTypeFilter === 'pole' && !s.poleLatLng)) searchTypeFilter = 'mixed';
+        quickSearchKeyword = "";
+        buildColorChips();
+        saveSettings();
+    }
+
+    /** 가진 자리를 필터를 풀어서라도 연다. 좌표가 없어 열 수 없으면 false */
+    function openSiteAnyway(site) {
+        revealSite(site);
+        var shown = getFilteredSites().find(s => s.id === site.id);
+        if (!shown) { drawMarkers(); return false; }
+        focusSite(shown);
+        return true;
+    }
+
+    /* ═══════════════════════════════════════════════════════════
+       [좌표 조회] "35.160819314,126.58905705" (위도,경도)
+       └ 경도,위도 순서로 넣어도 국내 범위로 판별해 바로잡는다
+       └ 같은 자리에 이미 핀이 있으면 그 핀을 연다
+    ═══════════════════════════════════════════════════════════ */
+    function parseCoordQuery(v) {
+        var mm = /^\s*(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/.exec(v);
+        if (!mm) return null;
+        var a = parseFloat(mm[1]), b = parseFloat(mm[2]);
+        var isLat = x => x >= 32 && x <= 39.5, isLng = x => x >= 123 && x <= 132.5;
+        if (isLat(a) && isLng(b)) return { lat: a, lng: b };
+        if (isLng(a) && isLat(b)) return { lat: b, lng: a };
+        return null;
+    }
+
+    function searchCoord(c) {
+        var key = coordKey(c.lat, c.lng);
+        var existing = currentSites.find(s =>
+            (s.poleLatLng && coordKey(s.poleLatLng.lat, s.poleLatLng.lng) === key) ||
+            (s.addrLatLng && coordKey(s.addrLatLng.lat, s.addrLatLng.lng) === key));
+        if (existing && openSiteAnyway(existing)) return;
+
+        var label = c.lat.toFixed(6) + ", " + c.lng.toFixed(6);
+        toast("좌표 " + label + " 위치를 찾고 있습니다.");
+        reverseAddress(new kakao.maps.LatLng(c.lat, c.lng), function(addr) {
+            var site = {
+                id: crypto.randomUUID(),
+                title: addr || label,
+                addrText: addr || label,
+                colorCode: 7,
+                poleNum: "",
+                addrLatLng: null,
+                poleLatLng: { lat: c.lat, lng: c.lng, addrStr: addr || label },
+                isAbsent: false,
+                memo: "좌표 조회 추가 (" + label + ")"
+            };
+            currentSites.push(site);
+            searchTypeFilter = 'mixed';
+            revealSite(site);
+            selectedKey = key;
+            saveAndRender();
+            map.setCenter(new kakao.maps.LatLng(c.lat, c.lng));
+            map.setLevel(2);
+            toast(addr ? "좌표 위치를 찾았습니다." : "좌표 위치에 핀을 놓았습니다. 주소는 찾지 못했습니다.");
+        });
+    }
+
     async function searchPole(poleNum) {
-        var existing = getFilteredSites().find(s => s.poleNum === poleNum);
-        if (existing) { focusSite(existing); return; }
+        var existing = currentSites.find(s => s.poleNum === poleNum);
+        if (existing && openSiteAnyway(existing)) return;
 
         toast("인입주 " + poleNum + " 검색 중입니다.");
 
@@ -1015,9 +1082,9 @@
                 });
             });
 
-            // 검색 결과 보이도록 혼합 모드로 강제 전환
+            // 검색 결과 보이도록 혼합 모드로 강제 전환하고, 색상·부재 필터에 가려지지 않게 한다
             searchTypeFilter = 'mixed';
-            saveSettings();
+            revealSite(currentSites[currentSites.length - 1]);
             selectedKey = coordKey(found[0].lat, found[0].lng);
             saveAndRender();
 
