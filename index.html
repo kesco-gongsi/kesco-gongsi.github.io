@@ -806,12 +806,12 @@
     /* ═══════════════════════════════════════════════════════════
        [수동 마커 추가] 모달 → 좌표→주소 역지오코딩 → 등록
     ═══════════════════════════════════════════════════════════ */
-    // 좌표 → 주소 역변환 (도로명 우선, 없으면 지번). 찾지 못하면 null
+    // 좌표 → 주소 역변환 (지번 우선, 없으면 도로명). 찾지 못하면 null
     function reverseAddress(latLng, done) {
         geocoder.coord2Address(latLng.getLng(), latLng.getLat(), function(result, status) {
             var addr = null;
             if (status === kakao.maps.services.Status.OK) {
-                addr = result[0].road_address ? result[0].road_address.address_name : result[0].address.address_name;
+                addr = result[0].address ? result[0].address.address_name : result[0].road_address.address_name;
             }
             done(addr);
         });
